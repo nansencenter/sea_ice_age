@@ -5,6 +5,10 @@ import matplotlib.pyplot as plt
 
 from ovl_plugins.lib.lagrangian import rungekutta4
 
+#ftp://osisaf.met.no/archive_test/ice/drift_lr/osi405c_demo_archive/2013/01/ice_drift_nh_polstere-625_multi-oi_201301191200-201301211200.nc
+#wget -w 1 -r -nc -nd -A 'ice_drift_nh_*.nc' -P /Data/sat/downloads/osi405c_demo_archive/ ftp://osisaf.met.no/archive_test/ice/drift_lr/osi405c_demo_archive/2016
+
+
 #### IMPLEMENT THE NSIDC ICE AGE ALGORITHM
 from iceagelib import *
 
