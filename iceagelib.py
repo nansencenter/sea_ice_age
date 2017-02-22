@@ -1,6 +1,7 @@
 import os
 import glob
 import datetime as dt
+from dateutil.parser import parse
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -25,7 +26,7 @@ def zoom_nan(img, factor, order=1):
     return imgz
     
 
-def read_uv_nsidc(ifile, factor=1):
+def read_uv_nsidc(ifile, factor=1, order=1):
     d = np.fromfile(ifile, np.int16)
     u = d[0::3].reshape(361,361) / 1000. # m/s
     v = d[1::3].reshape(361,361) / 1000. # m/s
@@ -33,13 +34,18 @@ def read_uv_nsidc(ifile, factor=1):
     c[c > 0] = 100
     u[c == 0] = np.nan
     v[c == 0] = np.nan
-
+    
     if factor != 1:
-        u = zoom_nan(u, factor)
-        v = zoom_nan(v, factor)
-        c = zoom_nan(c, factor)
-        
-    return u,v,c
+        u = zoom_nan(u, factor, order=order)
+        v = zoom_nan(v, factor, order=order)
+        c = zoom_nan(c, factor, order=order)
+
+    return u, v, c
+
+def get_nsidc_date(nsidc_file):
+    y = int(os.path.basename(nsidc_file).split('.')[3])
+    w = int(os.path.basename(nsidc_file).split('.')[4])
+    return dt.datetime(y, 1, 1) + dt.timedelta(w*7)
 
 def get_i_of_file_nsidc(year, week, ifiles):
     for i, ifile in enumerate(ifiles):
@@ -85,19 +91,28 @@ def read_uvc_osi(ifile, concDomain):
     
     return u,v,c
 
-def read_uv_osi_filled(ifile):
+def read_uv_osi_filled(ifile, factor=1, order=1):
     u = np.load(ifile)['u']
     v = np.load(ifile)['v']
     c = np.load(ifile)['ice']
+    u[c == 0] = np.nan
+    v[c == 0] = np.nan
+
+    if factor != 1:
+        u = zoom_nan(u, factor, order=order)
+        v = zoom_nan(v, factor, order=order)
+        c = zoom_nan(c, factor, order=order)
 
     return u,v,c
+
+def get_osi_date(osi_file):
+    return parse(os.path.basename(osi_file).split('_')[-1][:8])
     
 def reproject_ice(d0, d1, ice0):
     n = Nansat(domain=d0, array=ice0)
     n.reproject(d1, addmask=False, blockSize=10)
     return n[1]
-    
-    
+
 def propagate_from(i0, ifiles, reader=read_uv_nsidc, res=25000, factor=2,
                     h=60*60*24*7, repro=None, odir='./'):
     u0, v0, c0 = reader(ifiles[i0])
@@ -140,43 +155,43 @@ def propagate_from(i0, ifiles, reader=read_uv_nsidc, res=25000, factor=2,
                                     os.path.basename(ifiles[i]))
         np.savez_compressed(ofile+'.npy', ice=ice1.astype(np.bool))
 
-def get_nsidc_date(nsidc_file):
-    y = int(os.path.basename(nsidc_file).split('.')[3])
-    w = int(os.path.basename(nsidc_file).split('.')[4])
-    return dt.datetime(y, 1, 1) + dt.timedelta(w*7)
+def get_icemap_dates(icemap_file):
+    nameparts = os.path.splitext(os.path.basename(icemap_file))[0].split('_')
+    d0 = parse(nameparts[-2])
+    d1 = parse(nameparts[-1])
+    return d0, d1
+
+def propagate_from_newprop(i0, ifiles, reader=read_uv_nsidc, get_date=get_nsidc_date,
+                           res=25000, factor=1, order=1,
+                           h=60*60*24*7, repro=None, odir='./'):
+
+    u0, v0, f0 = reader(ifiles[i0], factor=factor)
+    d0 = get_date(ifiles[i0])
     
-def propagate_from_newprop(i0, ifiles, reader=read_uv_nsidc, res=25000, factor=1,
-                    h=60*60*24*7, repro=None, odir='./'):
+    ice0files = sorted(glob.glob(odir + '*%s.npz' % d0.strftime('%Y-%m-%d')))
 
-    u, v, f = read_uv_nsidc(ifiles[i0], factor=factor)
-
-    y0 = ifiles[i0].split('.')[3]
-    w0 = ifiles[i0].split('.')[4]
-    ice0files = sorted(glob.glob(odir + '*%s.%s.n.v3.bin_icemap.npy.npz' % (y0, w0)))
-
-    ice0 = np.zeros(f.shape)  # water is zero age old
-    ice0[f > 0] = 1 # on 1978, week 44 all ice is in second year
-
-    #import ipdb; ipdb.set_trace()
+    ice0 = np.zeros(f0.shape)  # water is zero age old
+    ice0[f0 > 0] = 1 # on 1 october all ice is 1 year old
 
     # reduce 100% concentration by previous concentrations
     for ice0file in ice0files:
-        y0prev = ice0file.split('.')[3]
-        if y0prev < y0:
-            print 'Correct ICE0 for', y0prev, ice0file
+        ice0d0, ice0d1 = get_icemap_dates(ice0file)
+        if ice0d0.year < d0.year:
+            print 'Correct ICE0 for', ice0d0.year
             ice0prev = np.load(ice0file)['ice']
             ice0 -= ice0prev
 
-    ice0[f <= 0] = 0
+    # fix negative concentration
+    ice0[f0 <= 0] = 0
     #ice0[ice0 < 0] = 0
 
     # save initiation day YYYY.WW-YYYY.WW
-    ofile = '%s/%s_%s_icemap' % (odir,
-                        os.path.basename(ifiles[i0]),
-                        os.path.basename(ifiles[i0]))
-    np.savez_compressed(ofile+'.npy', ice=ice0)
+    ofile = '%s/icemap_%s_%s.npz' % (odir,
+                        d0.strftime('%Y-%m-%d'),
+                        d0.strftime('%Y-%m-%d'))
+    np.savez_compressed(ofile, ice=ice0)
     
-    cols0, rows0 = np.meshgrid(range(u.shape[1]), range(u.shape[0]))
+    cols0, rows0 = np.meshgrid(range(u0.shape[1]), range(u0.shape[0]))
     k = 0
     for i in range(i0, len(ifiles)-1):
         print os.path.basename(ifiles[i0]), os.path.basename(ifiles[i])
@@ -231,15 +246,14 @@ def propagate_from_newprop(i0, ifiles, reader=read_uv_nsidc, res=25000, factor=1
         bincount = np.bincount(idx, w)
         ice1.flat[:bincount.size] += bincount
         
-        next_year = ifiles[i+1].split('.')[3]
-        next_week = ifiles[i+1].split('.')[4]
-        prev_files = sorted(glob.glob(odir + '*%s.%s.n.v3.bin_icemap.npy.npz' % (next_year, next_week)))
-        sum_prev_ice1 = np.zeros_like(ice1)
+        d1 = get_date(ifiles[i+1])
 
         print 'Sum previous: ', 
+        sum_prev_ice1 = np.zeros_like(ice1)
+        prev_files = sorted(glob.glob(odir + '*%s.npz' % d1.strftime('%Y-%m-%d')))
         for prev_file in prev_files:
-            prev_date = get_nsidc_date(prev_file)
-            if prev_date < get_nsidc_date(ifiles[i0]):
+            prev_date, _ = get_icemap_dates(prev_file)
+            if prev_date < d0:
                 print prev_date, 
                 sum_prev_ice1 += np.load(prev_file)['ice']
         print
@@ -252,11 +266,11 @@ def propagate_from_newprop(i0, ifiles, reader=read_uv_nsidc, res=25000, factor=1
         
         ice0 = ice1
 
-        ofile = '%s/%s_%s_icemap' % (odir,
-                            os.path.basename(ifiles[i0]),
-                            os.path.basename(ifiles[i+1]))
-        np.savez_compressed(ofile+'.npy', ice=ice0)
-        
+        ofile = '%s/icemap_%s_%s.npz' % (odir,
+                            d0.strftime('%Y-%m-%d'),
+                            d1.strftime('%Y-%m-%d'))
+        np.savez_compressed(ofile, ice=ice0)
+
         k += 1
 
 def collect_age(rfiles):
