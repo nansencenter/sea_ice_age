@@ -7,44 +7,6 @@ from nansat import *
 
 from iceagelib import *
 
-def get_mean_age(idir, thedate):
-    ### weighted average of fractional ice age
-    rfiles = sorted(glob.glob(idir + '*%s.npz' % thedate.strftime('%y-%m-%d')), reverse=True)
-    age0 = np.load(rfiles[0])['ice']
-    ice_age_sum = np.zeros(age0.shape)
-    ice_age_wsum = np.zeros(age0.shape)
-    ice_age_weights = []
-    theage = 2
-    for rfile in rfiles:
-        weight = np.load(rfile)['ice']
-        ice_age_weights.append(weight)
-        age = np.zeros(weight.shape) + theage
-        ice_age_sum += age * weight
-        ice_age_wsum += weight
-        theage += 1
-
-    ice_age_weights = np.array(ice_age_weights)
-
-    ice_age_mean = ice_age_sum / ice_age_wsum
-    # add one year ice and water/landmask from nsidc_age
-    ice_age_mean[np.isnan(ice_age_mean)] = 1
-    
-    return ice_age_weights, ice_age_mean
-
-def add_fyi(ice_age_weights, ice_age_mean, ice_mask):
-    myi_weight = ice_age_weights.sum(axis=0)
-    fyi_weight = 1 - myi_weight
-    fyi_weight[ice_mask == 0] = 0
-    
-    ice_age_weights = np.array([fyi_weight] + list(ice_age_weights))
-    ice_age_weighted = np.multiply(range(1,1+len(ice_age_weights)), ice_age_weights.T).T
-    ice_age_mean = ice_age_weighted.sum(axis=0) / ice_age_weights.sum(axis=0)
-    
-    ice_age_mean[ice_mask == 0] = 0
-    ice_age_mean[np.isnan(ice_mask)] = np.nan
-    
-    return ice_age_weights, ice_age_mean
-    
 osi_nsr='+proj=stere +a=6378273 +b=6356889.44891 +lat_0=90 +lat_ts=70 +lon_0=-45'
 osi_dom = Domain(osi_nsr, '-te -3781250 -5281250 3656250 5781250 -tr 12500 12500')
 
