@@ -14,7 +14,7 @@ nsidc_nsr = NSR('+proj=laea +datum=WGS84 +ellps=WGS84 +lat_0=90 +lon_0=0 +no_def
 nsidc_dom = Domain(nsidc_nsr, '-te -4512500 -4512500 4512500 4512500 -tr 12500 12500')
     
 
-# get NCIDC ice age for 2015, 22 (2015-06-04)
+# get NCIDC ice age for 2015, 22 (2015-05-01)
 idir_ia = '/files/nsidc0611_seaice_age_v3/'
 nsidc_f = sorted(glob.glob(idir_ia + '*.bin'))[-1]
 nsidc_age = np.fromfile(nsidc_f, np.uint8).reshape(361*2,361*2).astype(np.float32)
@@ -25,13 +25,13 @@ ice_mask[np.isnan(nsidc_age)] = np.nan
 
 agew_nsidc, agem_nsidc = get_mean_age(
                             '/files/sea_ice_age/nsidc_f2_newprop_2015/',
-                             dt.datetime(2015,06,4))
+                             dt.datetime(2015,05,1))
 
 agew_nsidc, agem_nsidc = add_fyi(agew_nsidc, agem_nsidc, ice_mask)
 
 agew_osi, agem_osi = get_mean_age(
                              '/files/sea_ice_age/osi_newprop_f5_zoom1/',
-                             dt.datetime(2015,06,4))
+                             dt.datetime(2015,05,1))
 
 agem_osi_pro = reproject_ice(osi_dom, nsidc_dom, agem_osi)
 agew_osi_pro = np.zeros((2,) + agem_osi_pro.shape)
@@ -79,49 +79,3 @@ ims3 = ax3.imshow(nsidc_age, cmap='jet', vmax=3)#;plt.colorbar(ims2)
 plt.connect('button_press_event', click)
 plt.show()
 
-water = np.ma.array(np.zeros_like(nsidc_age), mask=nsidc_age != 0)
-
-plt.close('all')
-r1,r2 = 150,540
-c1,c2 = 180,540
-fig,axs = plt.subplots(1,3)
-ax0 = axs[0].imshow(nsidc_age[r1:r2, c1:c2], cmap='jet', vmin=1, vmax=3)
-ax0wm = axs[0].imshow(water[r1:r2, c1:c2], cmap='gray')
-axs[0].set_title('Ice Age from NSIDC', fontsize=8)
-
-ax1 = axs[1].imshow(agem_nsidc[r1:r2, c1:c2], cmap='jet', vmin=1, vmax=3)
-ax1wm = axs[1].imshow(water[r1:r2, c1:c2], cmap='gray')
-axs[1].set_title('NSIDC drift, NERSC ice age', fontsize=8)
-
-ax2 = axs[2].imshow(agem_osi_pro[r1:r2, c1:c2], cmap='jet', vmin=1, vmax=3)
-ax2wm = axs[2].imshow(water[r1:r2, c1:c2], cmap='gray')
-axs[2].set_title('OSI drift, NERSC ice age', fontsize=8)
-
-[(ax.set_xticks([]),ax.set_yticks([])) for ax in axs]
-cbaxes = fig.add_axes([0.1, 0.25, 0.8, 0.03]) 
-cb = fig.colorbar(ax2, cax = cbaxes, orientation='horizontal')
-cb.ax.tick_params(labelsize=8)
-cb.set_label('Sea Ice Age, 04 June 2015', size=8)
-plt.tight_layout()
-plt.savefig('new_age_maps.png', dpi=200, bbox_inches='tight', pad_inches=0)
-plt.close()
-
-
-
-raise
-"""
-# plot histograms with areas
-nsidc_hist = []
-ages = np.arange(2, 9)
-for age in ages:
-    nsidc_hist.append(len(nsidc_age[nsidc_age == age]))
-plt.bar(ages, nsidc_hist, 0.5, label='NSIDC')
-
-nersc_hist = []
-for w in ice_age_weights:
-    nersc_hist.append(np.nansum(w))
-plt.bar(ages+0.5, nersc_hist, 0.5, label='NERSC')
-plt.legend(loc=0)
-plt.show()
-    
-"""

@@ -9,8 +9,11 @@ from iceagelib import *
 
 w = 0.5
 cMin = 15
+odir = '/files/sea_ice_age/osi405c_demo_archive_filled_since2012/'
 
-ifiles = sorted(glob.glob('/Data/sat/downloads/osi405c_demo_archive/*'))
+
+ifiles = sorted(glob.glob('/Data/sat/downloads/osi_saf_lr_ice_drift/ice_drift_nh_polstere-625_multi-oi_20121*'))
+ifiles += sorted(glob.glob('/Data/sat/downloads/osi405c_demo_archive/*'))
 
 # domain of OSISAF concentration
 nsr = nsr = NSR('+proj=stere +a=6378273 +b=6356889.44891 +lat_0=90 +lat_ts=70 +lon_0=-45')
@@ -50,8 +53,8 @@ for prd in [c, u, v]:
     k += 1
 
 for i, ifile in enumerate(ifiles):
-    ofile = os.path.basename(ifile).replace('.nc', '.npz')
+    ofile = odir + os.path.basename(ifile).replace('.nc', '.npz')
     print 'Save', ofile
     np.savez_compressed(ofile, ice=cuv[0][i], u=cuv[1][i], v=cuv[2][i])
 
-#vis_drift_npz('./', './')
+vis_drift_npz(odir, odir)

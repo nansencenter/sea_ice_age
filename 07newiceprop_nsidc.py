@@ -48,10 +48,7 @@ vis_ice_npz('/files/sea_ice_age/nsidc_f2_newprop_tmp/icemap_1979-09-02')
 # for comparison with OSI
 odir = '/files/sea_ice_age/nsidc_f2_newprop_2015/'
 ifiles = sorted(glob.glob(idir_uv + 'icemotion.grid.week.20*.bin'))
-
-propagate_from_newprop(get_i_of_file_nsidc(2013, 35, ifiles), ifiles, res=res, factor=factor, odir=odir)
-vis_ice_npz(odir + 'icemap_2013-09-03')
-
-propagate_from_newprop(get_i_of_file_nsidc(2014, 35, ifiles), ifiles, res=res, factor=factor, odir=odir)
-vis_ice_npz(odir + 'icemap_2014-09-03')
+for year in [2012, 2013, 2014]:
+    propagate_from_newprop(get_i_of_file_nsidc(year, 35, ifiles), ifiles, res=res, factor=factor, odir=odir)
+    vis_ice_npz(odir + 'icemap_%d-09-03' % year)
 

@@ -72,7 +72,7 @@ def get_i_of_file_osi(year, month, day, ifiles):
 def get_ice_conc(date, n=0):
     ''' Get ice concentration from OSISAF for given date '''
     print date, n
-    url_template = 'http://thredds.met.no/thredds/dodsC/myocean/siw-tac/siw-metno-glo-osisaf/conc/%Y/%m/ice_conc_nh_polstere-100_multi_%Y%m%d%H%S.nc'
+    url_template = 'http://thredds.met.no/thredds/dodsC/myocean/siw-tac/siw-metno-glo-osisaf/conc/%Y/%m/ice_conc_nh_polstere-100_multi_%Y%m%d1200.nc'
     url = date.strftime(url_template)
     try:
         ds = Dataset(url)
@@ -195,7 +195,7 @@ def get_icemap_dates(icemap_file):
 
 def propagate_from_newprop(i0, ifiles, reader=read_uv_nsidc, get_date=get_nsidc_date,
                            res=25000, factor=1, order=1,
-                           h=60*60*24*7, repro=None, odir='./'):
+                           h=60*60*24*7, repro=None, odir='./', conc=False):
     ''' Apply NERSC algorithm for ice age 
     Input:
         i0, index of file to start from
@@ -245,8 +245,9 @@ def propagate_from_newprop(i0, ifiles, reader=read_uv_nsidc, get_date=get_nsidc_
     # loop over files with ice drift
     for i in range(i0, len(ifiles)-1):
         print os.path.basename(ifiles[i0]), os.path.basename(ifiles[i])
-        # read U,V
+        # read U,V,C,T
         u, v, f = reader(ifiles[i], factor=factor)
+        d = get_date(ifiles[i])
 
         # increment of coordinates
         dc = u * h / res
@@ -329,9 +330,16 @@ def propagate_from_newprop(i0, ifiles, reader=read_uv_nsidc, get_date=get_nsidc_
             if prev_date < d0:
                 print prev_date, 
                 sum_prev_ice1 += np.load(prev_file)['ice']
-        print
+        print 'OK'
+        
+        # use SIC
+        if conc:
+            ice_conc = f / 100.
+        else:
+            ice_conc = np.ones_like(sum_prev_ice1)
+
         # maximum possible increment in sea ice fractional concentration
-        max_ice_increment = 1-sum_prev_ice1
+        max_ice_increment = ice_conc - sum_prev_ice1
         # limit increment by the maximum possible
         ice1[ice1 > max_ice_increment] = max_ice_increment[ice1 > max_ice_increment]
 
