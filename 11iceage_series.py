@@ -6,6 +6,10 @@ import matplotlib.pyplot as plt
 from nansat import *
 
 from iceagelib import *
+osi_nsr='+proj=stere +a=6378273 +b=6356889.44891 +lat_0=90 +lat_ts=70 +lon_0=-45'
+
+brem_idir = '/media/antonk/Data/files/sea_ice_age/bremensit/'
+brem_dom = Domain(osi_nsr, '-te -3843750 -5343750 3756250 5856250 -tr 12500 12500')
 
 # factor 5
 osi_nsr='+proj=stere +a=6378273 +b=6356889.44891 +lat_0=90 +lat_ts=70 +lon_0=-45'
@@ -14,11 +18,11 @@ osi_idir = '/files/sea_ice_age/osi_newprop_f5_zoom1_conc/'
 
 # factor 10 # for OSI-SAF drift
 factor = 4 # for NSIDC 
-osi_nsr='+proj=stere +a=6378273 +b=6356889.44891 +lat_0=90 +lat_ts=70 +lon_0=-45'
 osi_dom = Domain(osi_nsr, '-te -3781250 -5281250 3656250 5781250 -tr 6250 6250')
 osi_idir = '/files/sea_ice_age/osi_newprop_f10_zoom1_conc_sigma2/'
 idir_icemap_nsidc = '/files/sea_ice_age/nsidc_f4_newprop_2015/'
 idir_icemap_nersc = '/files/sea_ice_age/osi_newprop_f10_zoom1_conc/'
+
 
 
 nsidc_nsr = NSR('+proj=laea +datum=WGS84 +ellps=WGS84 +lat_0=90 +lon_0=0 +no_defs')
@@ -31,8 +35,7 @@ odir = 'ages2015_conc_f10/'
 
 # get NCIDC ice age for 2015, 22 (2015-06-04)
 idir_ia = '/files/nsidc0611_seaice_age_v3/'
-nsidc_files = sorted(glob.glob(idir_ia + 'iceage.grid.week.2014.52.n.v3.bin'))
-nsidc_files = sorted(glob.glob(idir_ia + 'iceage.grid.week.201[3,4].??.n.v3.bin'))
+nsidc_files = sorted(glob.glob(idir_ia + 'iceage.grid.week.201[2,3,4,5].??.n.v3.bin'))
 
 k = 0
 
@@ -42,6 +45,7 @@ nersc_agew_list = []
 osisaf_sit_list = []
 
 doplot = True
+doosisaf = False
 
 minage = 1
 maxage = 4
@@ -51,6 +55,7 @@ maxc = 1
 for nsidc_f in nsidc_files:
     nsidc_date = get_nsidc_date(nsidc_f)
     print nsidc_date
+    #import ipdb; ipdb.set_trace()
 
     nsidc_age = np.fromfile(nsidc_f, np.uint8).reshape(361*2,361*2).astype(np.float32)
     nsidc_age[nsidc_age==255] = np.nan
@@ -80,10 +85,16 @@ for nsidc_f in nsidc_files:
     agew_osi_pro[:, ice_mask != 1] = 0
     
     # read sea ice type from OSI-SAF and reproject
-    #sit = Dataset(nsidc_date.strftime(sit_url_fmt)).variables['ice_type'][0]
-    #sit_pro = reproject_ice(sit_dom, nsidc_dom, sit).astype('float32')
-    #sit_pro[np.isnan(ice_mask)] = np.nan
-    
+    if doosisaf:
+        sit = Dataset(nsidc_date.strftime(sit_url_fmt)).variables['ice_type'][0]
+        sit_pro = reproject_ice(sit_dom, nsidc_dom, sit).astype('float32')
+        sit_pro[np.isnan(ice_mask)] = np.nan
+        sit_pro[sit_pro == 1] = 0
+        sit_pro[sit_pro == 2] = 0
+        sit_pro[sit_pro == 3] = 1
+        sit_pro[sit_pro == 4] = 0.5
+        sit_pro[sit_pro == 255] = np.nan
+
     water = np.ma.array(np.zeros_like(nsidc_age), mask=nsidc_age != 0)
     #raise
 
@@ -105,9 +116,10 @@ for nsidc_f in nsidc_files:
     nsidc_myi = np.array(nsidc_age)
     nsidc_myi[nsidc_myi==1] = 0
     nsidc_myi[nsidc_myi > 0] = 1
-    if doplot: ax00 = axs[0,0].imshow(nsidc_myi[r1:r2, c1:c2], cmap='jet', vmin=minc, vmax=maxc)
-    if doplot: ax0wm = axs[0,0].imshow(water[r1:r2, c1:c2], cmap='gray')
-    if doplot: axs[0,0].set_title('MYI NSIDC/NSIDC', fontsize=8)
+    if doplot:
+        ax00 = axs[0,0].imshow(nsidc_myi[r1:r2, c1:c2], cmap='jet', vmin=minc, vmax=maxc)
+        ax0wm = axs[0,0].imshow(water[r1:r2, c1:c2], cmap='gray')
+        axs[0,0].set_title('MYI NSIDC/NSIDC', fontsize=8)
     nsidc_age_list.append(nsidc_age[r1:r2, c1:c2])
 
     #agem_osi_pro_predom = np.argmax(agew_osi_pro, axis=0) + 1.
@@ -119,19 +131,27 @@ for nsidc_f in nsidc_files:
 
     myi_nsidc = agew_nsidc[1:].sum(axis=0)
     myi_nsidc[np.isnan(ice_mask)] = np.nan
-    if doplot: ax01 = axs[0,1].imshow(myi_nsidc[r1:r2, c1:c2], cmap='jet', vmin=0, vmax=1)
-    if doplot: ax3wm = axs[0,1].imshow(water[r1:r2, c1:c2], cmap='gray')
-    if doplot: axs[0,1].set_title('MYI NSIDC/NERSC', fontsize=8)
+    if doplot:
+        ax01 = axs[0,1].imshow(myi_nsidc[r1:r2, c1:c2], cmap='jet', vmin=0, vmax=1)
+        ax3wm = axs[0,1].imshow(water[r1:r2, c1:c2], cmap='gray')
+        axs[0,1].set_title('MYI NSIDC/NERSC', fontsize=8)
     nsidc_agew_list.append(agew_nsidc[:, r1:r2, c1:c2])
 
-    #if doplot: ax02 = axs[0,2].imshow(agem_osi_pro[r1:r2, c1:c2], cmap='jet', vmin=1, vmax=4)
-    #if doplot: ax2wm = axs[0,2].imshow(water[r1:r2, c1:c2], cmap='gray')
-    #if doplot: axs[0,2].set_title('SIA/W NERSC', fontsize=8)
-    #nersc_agew_list.append(agem_osi_pro[r1:r2, c1:c2])
+    # show BREMEN MYI
+    brem_file = glob.glob(os.path.join(brem_idir, nsidc_date.strftime('ECICE-ASCAT-AMSR2-%Y%m*.nc')))
+    if len(brem_file) > 0:
+        nmyi = Dataset(brem_file[0]).variables['nmyi'][:].reshape(896, 608)
+        nmyi_pro = reproject_ice(brem_dom, nsidc_dom, nmyi) / 100.
+        if doplot:
+            ax02 = axs[0,2].imshow(nmyi_pro[r1:r2, c1:c2], cmap='jet', vmin=minc, vmax=maxc)
+            ax2wm = axs[0,2].imshow(water[r1:r2, c1:c2], cmap='gray')
+            axs[0,2].set_title('MYI UNI-BREMEN', fontsize=8)
 
-    #if doplot: ax03 = axs[0,3].imshow(sit_pro[r1:r2, c1:c2], cmap='jet', vmin=1, vmax=4)
-    #if doplot: ax1wm = axs[0,3].imshow(water[r1:r2, c1:c2], cmap='gray')
-    #if doplot: axs[0,3].set_title('SIT OSISAF', fontsize=8)
+    if doosisaf:
+        if doplot:
+            ax03 = axs[0,3].imshow(sit_pro[r1:r2, c1:c2], cmap='jet', vmin=minc, vmax=maxc)
+            ax1wm = axs[0,3].imshow(water[r1:r2, c1:c2], cmap='gray')
+            axs[0,3].set_title('MYI OSISAF', fontsize=8)
     #osisaf_sit_list.append(sit_pro[r1:r2, c1:c2])
 
     nersc_agew_list.append(agew_osi_pro[:, r1:r2, c1:c2])
@@ -144,43 +164,47 @@ for nsidc_f in nsidc_files:
     else:
         age2 = np.zeros(ice_mask.shape)
     age2[np.isnan(ice_mask)] = np.nan
-    if doplot: ax10 = axs[1,0].imshow(age2[r1:r2, c1:c2], cmap='jet', vmin=0, vmax=1)
-    if doplot: ax3wm = axs[1,0].imshow(water[r1:r2, c1:c2], cmap='gray')
-    if doplot: axs[1,0].set_title('2YO OSISAF/NERSC', fontsize=8)
+    if doplot:
+        ax10 = axs[1,0].imshow(age2[r1:r2, c1:c2], cmap='jet', vmin=0, vmax=1)
+        ax3wm = axs[1,0].imshow(water[r1:r2, c1:c2], cmap='gray')
+        axs[1,0].set_title('2YO OSISAF/NERSC', fontsize=8)
 
     if len(agew_osi_pro) > 2:
         age3 = agew_osi_pro[2]
     else:
         age3 = np.zeros(ice_mask.shape)
     age3[np.isnan(ice_mask)] = np.nan
-    if doplot: ax11 = axs[1,1].imshow(age3[r1:r2, c1:c2], cmap='jet', vmin=0, vmax=1)
-    if doplot: ax3wm = axs[1,1].imshow(water[r1:r2, c1:c2], cmap='gray')
-    if doplot: axs[1,1].set_title('3YO OSISAF/NERSC', fontsize=8)
+    if doplot:
+        ax11 = axs[1,1].imshow(age3[r1:r2, c1:c2], cmap='jet', vmin=0, vmax=1)
+        ax3wm = axs[1,1].imshow(water[r1:r2, c1:c2], cmap='gray')
+        axs[1,1].set_title('3YO OSISAF/NERSC', fontsize=8)
 
     if len(agew_osi_pro) > 3:
         age4 = agew_osi_pro[3]
     else:
         age4 = np.zeros(ice_mask.shape)
     age4[np.isnan(ice_mask)] = np.nan
-    if doplot: ax12 = axs[1,2].imshow(age4[r1:r2, c1:c2], cmap='jet', vmin=0, vmax=1)
-    if doplot: ax3wm = axs[1,2].imshow(water[r1:r2, c1:c2], cmap='gray')
-    if doplot: axs[1,2].set_title('4YO OSISAF/NERSC', fontsize=8)
+    if doplot:
+        ax12 = axs[1,2].imshow(age4[r1:r2, c1:c2], cmap='jet', vmin=0, vmax=1)
+        ax3wm = axs[1,2].imshow(water[r1:r2, c1:c2], cmap='gray')
+        axs[1,2].set_title('4YO OSISAF/NERSC', fontsize=8)
 
     myi = agew_osi_pro[1:].sum(axis=0)
     myi[np.isnan(ice_mask)] = np.nan
-    if doplot: ax13 = axs[1,3].imshow(myi[r1:r2, c1:c2], cmap='jet', vmin=0, vmax=1)
-    if doplot: ax3wm = axs[1,3].imshow(water[r1:r2, c1:c2], cmap='gray')
-    if doplot: axs[1,3].set_title('MYI OSISAF/NERSC', fontsize=8)
+    if doplot:
+        ax13 = axs[1,3].imshow(myi[r1:r2, c1:c2], cmap='jet', vmin=0, vmax=1)
+        ax3wm = axs[1,3].imshow(water[r1:r2, c1:c2], cmap='gray')
+        axs[1,3].set_title('MYI OSISAF/NERSC', fontsize=8)
 
     if doplot: 
         [(ax.set_xticks([]),ax.set_yticks([])) for ax in axs.flatten()]
 
-        cbaxes = fig.add_axes([0.0, 0, 0.45, 0.03]) 
-        cb = fig.colorbar(ax00, cax=cbaxes, orientation='horizontal')
-        cb.ax.tick_params(labelsize=8)
-        cb.set_label('SIA, %s' % nsidc_date.strftime('%Y-%m-%d'), size=8)
+        #cbaxes = fig.add_axes([0.0, 0, 0.45, 0.03]) 
+        #cb = fig.colorbar(ax00, cax=cbaxes, orientation='horizontal')
+        #cb.ax.tick_params(labelsize=8)
+        #cb.set_label('SIA, %s' % nsidc_date.strftime('%Y-%m-%d'), size=8)
 
-        cbaxes2 = fig.add_axes([0.5, 0, 0.45, 0.03]) 
+        cbaxes2 = fig.add_axes([0.0, 0, 0.9, 0.03]) 
         cb2 = fig.colorbar(ax10, cax=cbaxes2, orientation='horizontal')
         cb2.ax.tick_params(labelsize=8)
         cb2.set_label('MYI fraction, %s' % nsidc_date.strftime('%Y-%m-%d'), size=8)
@@ -190,8 +214,8 @@ for nsidc_f in nsidc_files:
         plt.close()
     k += 1
 
-labels = [f.split('.')[3][2:]+'/'+f.split('.')[4] for f in nsidc_files]
 
+labels = [f.split('.')[3][2:]+'/'+f.split('.')[4] for f in nsidc_files]
 
 nsidc_age_list = np.array(nsidc_age_list)
 nsidc_agew_list = np.array(nsidc_agew_list)
@@ -199,6 +223,7 @@ nersc_agew_list = np.array(nersc_agew_list)
 
 
 AREA = 6.250 * 6.250 / 1000000.
+XTICSTEP = 13
 ### NSIDC AGE
 colors = ['#000000', '#00007f', '#00d4ff', '#f4db00', '#7f0000']
 
@@ -218,7 +243,7 @@ cumsum = cumsum1
 plt.ylim()
 plt.legend(loc=3)
 plt.title('Weekly %s SIA' % age_name)
-plt.xticks(range(0,110,10), labels[0:110:10])
+plt.xticks(range(0,len(nsidc_files),XTICSTEP), labels[0:len(nsidc_files):XTICSTEP])
 plt.xlabel('years/weeks')
 plt.ylabel('area, $10^6$ km')
 
@@ -243,7 +268,7 @@ for agew_list, agew_name in [(nsidc_agew_list, 'NSIDC_NERSC'), (nersc_agew_list,
         plt.fill_between(x, areas_list_sum[i], 0, label='%sYI' % i, color=colors[i])
     plt.legend(loc=3)
     plt.title('Weekly %s SIA' % agew_name)
-    plt.xticks(range(0,110,10), labels[0:110:10])
+    plt.xticks(range(0,len(nsidc_files),XTICSTEP), labels[0:len(nsidc_files):XTICSTEP])
     plt.xlabel('years/weeks')
     plt.ylabel('area, $10^6$ km')
     plt.savefig(odir + 'weekly_%s_SIA.png' % agew_name, dpi=200, bbox_inches='tight', pad_inches=0)
