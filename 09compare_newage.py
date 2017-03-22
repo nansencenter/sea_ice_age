@@ -8,35 +8,38 @@ from nansat import *
 from iceagelib import *
 
 osi_nsr='+proj=stere +a=6378273 +b=6356889.44891 +lat_0=90 +lat_ts=70 +lon_0=-45'
-osi_dom = Domain(osi_nsr, '-te -3781250 -5281250 3656250 5781250 -tr 12500 12500')
+osi_dom = Domain(osi_nsr, '-te -3781250 -5281250 3656250 5781250 -tr 6250 6250')
 
 nsidc_nsr = NSR('+proj=laea +datum=WGS84 +ellps=WGS84 +lat_0=90 +lon_0=0 +no_defs')
-nsidc_dom = Domain(nsidc_nsr, '-te -4512500 -4512500 4512500 4512500 -tr 12500 12500')
+nsidc_dom = Domain(nsidc_nsr, '-te -4512500 -4512500 4512500 4512500 -tr 6250 6250')
     
 
 # get NCIDC ice age for 2015, 22 (2015-05-01)
+factor = 4
+idir_icemap_nsidc = '/files/sea_ice_age/nsidc_f4_newprop_2015/'
+idir_icemap_nersc = '/files/sea_ice_age/osi_newprop_f10_zoom1_conc/'
+
 idir_ia = '/files/nsidc0611_seaice_age_v3/'
-nsidc_f = sorted(glob.glob(idir_ia + '*.bin'))[-1]
+nsidc_f = '/files/nsidc0611_seaice_age_v3/iceage.grid.week.2014.52.n.v3.bin'
 nsidc_age = np.fromfile(nsidc_f, np.uint8).reshape(361*2,361*2).astype(np.float32)
 nsidc_age[nsidc_age==255] = np.nan
 nsidc_age /= 5.
 ice_mask = (nsidc_age > 0).astype(np.float32)
 ice_mask[np.isnan(nsidc_age)] = np.nan
 
-agew_nsidc, agem_nsidc = get_mean_age(
-                            '/files/sea_ice_age/nsidc_f2_newprop_2015/',
-                             dt.datetime(2015,05,1))
+if factor > 2:
+    ice_mask = zoom_nan(ice_mask, factor / 2., order=0)
+    nsidc_age = zoom_nan(nsidc_age, factor / 2., order=0)
 
+agew_nsidc, agem_nsidc = get_mean_age(idir_icemap_nsidc, dt.datetime(2014,12,31))
 agew_nsidc, agem_nsidc = add_fyi(agew_nsidc, agem_nsidc, ice_mask)
 
-agew_osi, agem_osi = get_mean_age(
-                             '/files/sea_ice_age/osi_newprop_f5_zoom1/',
-                             dt.datetime(2015,05,1))
 
+agew_osi, agem_osi = get_mean_age(idir_icemap_nersc, dt.datetime(2014,12,31))
 agem_osi_pro = reproject_ice(osi_dom, nsidc_dom, agem_osi)
-agew_osi_pro = np.zeros((2,) + agem_osi_pro.shape)
-agew_osi_pro[0] = reproject_ice(osi_dom, nsidc_dom, agew_osi[0])
-agew_osi_pro[1] = reproject_ice(osi_dom, nsidc_dom, agew_osi[1])
+agew_osi_pro = np.zeros((len(agew_osi),) + agem_osi_pro.shape)
+for i in range(len(agew_osi)):
+    agew_osi_pro[i] = reproject_ice(osi_dom, nsidc_dom, agew_osi[i])
 
 agew_osi_pro, agem_osi_pro = add_fyi(agew_osi_pro, agem_osi_pro, ice_mask)
 
@@ -60,7 +63,6 @@ def click(event):
         am_osi = agem_osi_pro[y0, x0]
         ice_age_nsidc = nsidc_age[y0, x0]
         wx = range(1,1+len(aw_nsidc))
-        print wx, aw_nsidc
         ax4.clear()
 
         ax4.plot(wx, aw_nsidc, '.-r')
@@ -72,10 +74,12 @@ def click(event):
         ax4.plot([ice_age_nsidc, ice_age_nsidc], [0, 1], 'b-')
 
         fig.canvas.draw()
+vmax = 4
+ims1 = ax1.imshow(agem_nsidc, cmap='jet', vmax=vmax)#;plt.colorbar(ims1)
+ims2 = ax2.imshow(agem_osi_pro, cmap='jet', vmax=vmax)#;plt.colorbar(ims2)
+ims3 = ax3.imshow(nsidc_age, cmap='jet', vmax=vmax)#;plt.colorbar(ims2)
+ax1.set_xlim([100, 300])
 
-ims1 = ax1.imshow(agem_nsidc, cmap='jet', vmax=3)#;plt.colorbar(ims1)
-ims2 = ax2.imshow(agem_osi_pro, cmap='jet', vmax=3)#;plt.colorbar(ims2)
-ims3 = ax3.imshow(nsidc_age, cmap='jet', vmax=3)#;plt.colorbar(ims2)
 plt.connect('button_press_event', click)
 plt.show()
 

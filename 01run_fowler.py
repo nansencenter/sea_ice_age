@@ -17,7 +17,7 @@ idir_ia = '/files/nsidc0611_seaice_age_v3/'
 
 
 #icemotion.grid.week.1979.07.n.v3.bin
-ifiles = sorted(glob.glob(idir_uv + '*.bin'))[:321]
+ifiles = sorted(glob.glob(idir_uv + 'icemotion.grid.week*.bin'))[:321]
 
 #"""
 factor=10

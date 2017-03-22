@@ -11,10 +11,22 @@ from nansat import Nansat
 from ovl_plugins.lib.interpolation import fill_gaps_nn
 from ovl_plugins.lib.lagrangian import rungekutta4
 from scipy.ndimage.interpolation import zoom
+from scipy.ndimage.filters import gaussian_filter
 
 #### IMPLEMENT THE NSIDC ICE AGE ALGORITHM
+def nangaussian_filter(img, sigma):
+    ''' Gaussian filter for images with NaN '''
+    img0 = img.copy()
+    img0[np.isnan(img)] = 0
+    img0 = gaussian_filter(img0, sigma=sigma)
 
-def zoom_nan(img, factor, order=1):
+    imgw = 0 * img.copy() + 1
+    imgw[np.isnan(imgw)] = 0
+    imgw = gaussian_filter(imgw, sigma=sigma)
+    
+    return img0 / imgw
+
+def zoom_nan(img, factor, order=1, sigma=0):
     ''' Increase resolution of image with gaps  filled by nan
     Input:
         img: matrix to resize
@@ -25,16 +37,20 @@ def zoom_nan(img, factor, order=1):
     '''
     imgz = np.array(img, np.float32)
     mask = np.isfinite(imgz).astype(np.float32)
-    imgz = fill_gaps_nn(imgz, 3)
+    imgz = fill_gaps_nn(imgz, 10)
     imgz[np.isnan(imgz)] = 0
     
     imgz = zoom(imgz, factor, order=order)
     mask = zoom(mask, factor, order=order)
     imgz[mask < 0.5] = np.nan
+    
+    if sigma > 0:
+        imgz = nangaussian_filter(imgz, sigma)
+    
     return imgz
     
 
-def read_uv_nsidc(ifile, factor=1, order=1):
+def read_uv_nsidc(ifile, factor=1, order=1, sigma=0):
     ''' Load U,V and ice mask from NSIDC file '''
     d = np.fromfile(ifile, np.int16)
     u = d[0::3].reshape(361,361) / 1000. # m/s
@@ -45,9 +61,9 @@ def read_uv_nsidc(ifile, factor=1, order=1):
     v[c == 0] = np.nan
     
     if factor != 1:
-        u = zoom_nan(u, factor, order=order)
-        v = zoom_nan(v, factor, order=order)
-        c = zoom_nan(c, factor, order=order)
+        u = zoom_nan(u, factor, order=order, sigma=sigma)
+        v = zoom_nan(v, factor, order=order, sigma=sigma)
+        c = zoom_nan(c, factor, order=order, sigma=sigma)
 
     return u, v, c
 
@@ -105,7 +121,7 @@ def read_uvc_osi(ifile, concDomain):
     
     return u,v,c
 
-def read_uv_osi_filled(ifile, factor=1, order=1):
+def read_uv_osi_filled(ifile, factor=1, order=1, sigma=0):
     ''' Load U,V and ice mask from OSISAF file with gaps filled '''
     u = np.load(ifile)['u']
     v = np.load(ifile)['v']
@@ -114,9 +130,9 @@ def read_uv_osi_filled(ifile, factor=1, order=1):
     v[c == 0] = np.nan
 
     if factor != 1:
-        u = zoom_nan(u, factor, order=order)
-        v = zoom_nan(v, factor, order=order)
-        c = zoom_nan(c, factor, order=order)
+        u = zoom_nan(u, factor, order=order, sigma=sigma)
+        v = zoom_nan(v, factor, order=order, sigma=sigma)
+        c = zoom_nan(c, factor, order=order, sigma=sigma)
 
     return u,v,c
 
@@ -131,7 +147,8 @@ def reproject_ice(d0, d1, ice0):
     return n[1]
 
 def propagate_from(i0, ifiles, reader=read_uv_nsidc, res=25000, factor=2,
-                    h=60*60*24*7, repro=None, odir='./'):
+                    h=60*60*24*7, repro=None, odir='./',
+                    saveice=True, savexy=False):
     ''' Apply NSIDC algorithm for ice age 
     Input:
         i0, index of file to start from
@@ -184,7 +201,10 @@ def propagate_from(i0, ifiles, reader=read_uv_nsidc, res=25000, factor=2,
         ofile = '%s/%s_%s_icemap' % (odir,
                                     os.path.basename(ifiles[i0]),
                                     os.path.basename(ifiles[i]))
-        np.savez_compressed(ofile+'.npy', ice=ice1.astype(np.bool))
+        if saveice:
+            np.savez_compressed(ofile+'.npz', ice=ice1.astype(np.bool))
+        if savexy:
+            np.savez_compressed(ofile+'_xy.npz', x1=x1, y1=y1)
 
 def get_icemap_dates(icemap_file):
     ''' Get dates of from ice map filename''' 
@@ -194,8 +214,9 @@ def get_icemap_dates(icemap_file):
     return d0, d1
 
 def propagate_from_newprop(i0, ifiles, reader=read_uv_nsidc, get_date=get_nsidc_date,
-                           res=25000, factor=1, order=1,
-                           h=60*60*24*7, repro=None, odir='./', conc=False):
+                           res=25000, factor=1, order=1, sigma=0,
+                           h=60*60*24*7, repro=None, odir='./', conc=False,
+                           min_flux=0):
     ''' Apply NERSC algorithm for ice age 
     Input:
         i0, index of file to start from
@@ -211,7 +232,7 @@ def propagate_from_newprop(i0, ifiles, reader=read_uv_nsidc, get_date=get_nsidc_
         None. Files with sea ice age.
     '''
     # get initial ice mask and drift
-    u0, v0, f0 = reader(ifiles[i0], factor=factor)
+    u0, v0, f0 = reader(ifiles[i0], factor=factor, order=order, sigma=sigma)
     d0 = get_date(ifiles[i0])
     
     # find files with ice age produced from previous years
@@ -246,13 +267,17 @@ def propagate_from_newprop(i0, ifiles, reader=read_uv_nsidc, get_date=get_nsidc_
     for i in range(i0, len(ifiles)-1):
         print os.path.basename(ifiles[i0]), os.path.basename(ifiles[i])
         # read U,V,C,T
-        u, v, f = reader(ifiles[i], factor=factor)
+        u, v, f = reader(ifiles[i], factor=factor, order=order, sigma=sigma)
         d = get_date(ifiles[i])
 
         # increment of coordinates
         dc = u * h / res
         dr = - v * h / res
 
+        # allow only substantial enough increment
+        #dc[np.abs(dc) < min_incr] = min_incr * np.sign(dc[np.abs(dc) < min_incr])
+        #dr[np.abs(dr) < min_incr] = min_incr * np.sign(dr[np.abs(dr) < min_incr])
+        
         # coordinates at step 2
         cols1 = cols0+dc
         rows1 = rows0+dr
@@ -284,6 +309,12 @@ def propagate_from_newprop(i0, ifiles, reader=read_uv_nsidc, get_date=get_nsidc_
         ice1ab = sab * ice0
         ice1ba = sba * ice0
         ice1bb = sbb * ice0
+        
+        # allow only substantial enough flux
+        #for ice1flux in [ice1aa, ice1ab, ice1ba, ice1bb]:
+        #    ice1flux[ice1flux < min_flux] = 0
+
+        #import ipdb; ipdb.set_trace()
 
         # find valid donor pixels
         gpi = np.isfinite(cols1) * np.isfinite(rows1)
@@ -291,7 +322,7 @@ def propagate_from_newprop(i0, ifiles, reader=read_uv_nsidc, get_date=get_nsidc_
 
         # for four directions
         # w: ice flux from donor pixels
-        # indeces of recipient pixels
+        # flat index of recipient pixels
         # bincount: sum of fluxes from donor pixels for given direction
         # ice1: sum of fluxes from donor pixels for all directions
         
@@ -364,12 +395,13 @@ def collect_age(rfiles):
     
     return ice_age
 
-def vis_ice_npz(pref, vmin=0, vmax=1):
+def vis_ice_npz(pref, vmin=0, vmax=1, nfiles=None):
     ''' Visualize NPZ file with single ice age fraction as a PNG '''
-    ifiles = sorted(glob.glob(pref+'*.npz'))
+    ifiles = sorted(glob.glob(pref+'*.npz'))[:nfiles]
     k = 0
     for ifile in ifiles:
         ice = np.load(ifile)['ice']
+        ice[ice <= vmin] = np.nan
         plt.imsave('%s_frame_%05d.png' % (pref, k), ice, cmap='jet', vmin=vmin, vmax=vmax)
         k += 1
 

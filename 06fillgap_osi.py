@@ -9,11 +9,11 @@ from iceagelib import *
 
 w = 0.5
 cMin = 15
-odir = '/files/sea_ice_age/osi405c_demo_archive_filled_since2012/'
+odir = '/files/sea_ice_age/osi405c_demo_archive_filled/201209/'
 
 
-ifiles = sorted(glob.glob('/Data/sat/downloads/osi_saf_lr_ice_drift/ice_drift_nh_polstere-625_multi-oi_20121*'))
-ifiles += sorted(glob.glob('/Data/sat/downloads/osi405c_demo_archive/*'))
+ifiles = sorted(glob.glob('/mnt/10.11.12.232/sat_downloads/osi_saf_lr_ice_drift/ice_drift_nh_polstere-625_multi-oi_201209*'))
+ifiles += sorted(glob.glob('/mnt/10.11.12.232/sat_downloads/osi_saf_lr_ice_drift/ice_drift_nh_polstere-625_multi-oi_201210*'))
 
 # domain of OSISAF concentration
 nsr = nsr = NSR('+proj=stere +a=6378273 +b=6356889.44891 +lat_0=90 +lat_ts=70 +lon_0=-45')

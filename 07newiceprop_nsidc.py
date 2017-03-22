@@ -13,8 +13,14 @@ from iceagelib import *
 idir_uv = '/files/nsidc0116_icemotion_vectors_v3/'
 idir_ia = '/files/nsidc0611_seaice_age_v3/'
 
-res = 12500
-factor = 2
+res = 6250
+factor = 4
+odir = '/files/sea_ice_age/nsidc_f4_newprop_2015/'
+
+#res = 12500
+#factor = 2
+#odir = '/files/sea_ice_age/nsidc_f2_newprop_2015/'
+
 
 """
 # 1978 - 1984
@@ -46,9 +52,9 @@ vis_ice_npz('/files/sea_ice_age/nsidc_f2_newprop_tmp/icemap_1979-09-02')
 
 # 2013 - 2016
 # for comparison with OSI
-odir = '/files/sea_ice_age/nsidc_f2_newprop_2015/'
 ifiles = sorted(glob.glob(idir_uv + 'icemotion.grid.week.20*.bin'))
-for year in [2012, 2013, 2014]:
-    propagate_from_newprop(get_i_of_file_nsidc(year, 35, ifiles), ifiles, res=res, factor=factor, odir=odir)
-    vis_ice_npz(odir + 'icemap_%d-09-03' % year)
+for year in [2013, 2014]:
+    print year
+    #propagate_from_newprop(get_i_of_file_nsidc(year, 37, ifiles), ifiles, res=res, factor=factor, odir=odir)
+    vis_ice_npz(odir + 'icemap_%d-09-17' % year)
 

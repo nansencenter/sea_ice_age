@@ -15,6 +15,13 @@ nsidc_dom = Domain(nsidc_nsr, '-te -4512500 -4512500 4512500 4512500 -tr 12500 1
 
 ifiles = sorted(glob.glob('/files/sea_ice_age/osi405c_demo_archive_filled/*npz'))
 
+
+propagate_from(get_i_of_file_osi(2013, 9, 15, ifiles), ifiles[:255], res=res,
+                factor=factor, h=h, reader=read_uv_osi_filled,
+                repro=(osi_dom, nsidc_dom),
+                odir='/files/sea_ice_age/20130915_npz/')
+
+raise
 """
 propagate_from(get_i_of_file_osi(2013, 9, 15, ifiles), ifiles[:255], res=res,
                 factor=factor, h=h, reader=read_uv_osi_filled,
