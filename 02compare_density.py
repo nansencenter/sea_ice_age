@@ -4,31 +4,24 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 from ovl_plugins.lib.lagrangian import rungekutta4
-
-#### IMPLEMENT THE NSIDC ICE AGE ALGORITHM
+from nansat import *
 from iceagelib import *
+
+
+#### PLOT RESULTS OF THE NSIDC ICE AGE ALGORITHM
 
 idir_uv = '/files/nsidc0116_icemotion_vectors_v3/'
 idir_ia = '/files/nsidc0611_seaice_age_v3/'
-#idir = 
 
-#icemotion.grid.week.1979.07.n.v3.bin
-ifiles = sorted(glob.glob(idir_uv + '*.bin'))[:321]
+# NSIDC ICE AGE
+nsidc_nsr = NSR('+proj=laea +datum=WGS84 +ellps=WGS84 +lat_0=90 +lon_0=0 +no_defs')
+nsidc_dom = Domain(nsidc_nsr, '-te -4512500 -4512500 4512500 4512500 -tr 12500 12500')
 
-# f2
-ice_age_f2 = collect_age(1984, 52, ifiles, idir='/files/sea_ice_age/nsidc_f2/')
+# DESTINATION DOMAIN    
+dst_nsr = NSR('+proj=stere +datum=WGS84 +ellps=WGS84 +lat_0=90 +lon_0=0  +lat_ts=70 +no_defs')
+#dst_dom = Domain(dst_nsr, '-te -4512500 -4512500 4512500 4512500 -tr 6250 6250')
+dst_dom = Domain(dst_nsr, '-te -2325000 -2675000 2050000 2325000 -tr 6250 6250')
 
-## REDUCE RESOLUTION OF NERSC PRODUCT 2 times
-ice_age_f4 = collect_age(1984, 52, ifiles, idir='/files/sea_ice_age/nsidc_f4/')
-ice_age_f4 = np.nanmax(np.stack([ice_age_f4[0::2, 0::2],
-                                 ice_age_f4[1::2, 1::2]]), axis=0)
-
-## REDUCE RESOLUTION OF NERSC PRODUCT 4 times
-ice_age_f8 = collect_age(1984, 52, ifiles, idir='/files/sea_ice_age/nsidc_f8/')
-ice_age_f8 = np.nanmax(np.stack([ice_age_f8[0::4, 0::4],
-                                 ice_age_f8[1::4, 1::4],
-                                 ice_age_f8[2::4, 2::4],
-                                 ice_age_f8[3::4, 3::4]]), axis=0)
 
 # get NCIDC ice age
 nsidc_f = sorted(glob.glob(idir_ia + '*.bin'))[51]
@@ -36,45 +29,60 @@ nsidc_age = np.fromfile(nsidc_f, np.uint8).reshape(361*2,361*2).astype(np.float1
 nsidc_age[nsidc_age==255] = np.nan
 nsidc_age /= 5.
 
-ice_age_f2[np.isnan(nsidc_age)] = np.nan
-ice_age_f4[np.isnan(nsidc_age)] = np.nan
-ice_age_f8[np.isnan(nsidc_age)] = np.nan
 
-f = plt.figure(figsize=(5,5), dpi=300)
+bins = np.arange(2,10)
+strt = 0
+wdth = 0.2
+ice_ages = []
+factors = [2,4,8,10]
+for factor in factors:
+    # f2
+    odir = '/files/sea_ice_age/nsidc_f%02d/' % factor
+    rfiles = sorted(glob.glob(odir + '*%04d.%02d.n.v3.bin_icemap.npz' % (1984, 52)), reverse=True)
+    ice_age = collect_age(rfiles)
 
-plt.subplot(2,2,1)
-plt.title('NERSC, 1_density', fontsize=5)
-plt.imshow(ice_age_f2, vmin=0, vmax=8, interpolation='nearest')
-plt.xticks([]);plt.yticks([])
+    if factor == 4:
+        ice_age = np.nanmax(np.stack([ice_age[0::2, 0::2],
+                                      ice_age[1::2, 1::2]]), axis=0)
+    elif factor == 8:
+        ## REDUCE RESOLUTION OF NERSC PRODUCT 4 times
+        ice_age = np.nanmax(np.stack([ice_age[0::4, 0::4],
+                                      ice_age[1::4, 1::4],
+                                      ice_age[2::4, 2::4],
+                                      ice_age[3::4, 3::4]]), axis=0)
+    elif factor == 10:
+        ## REDUCE RESOLUTION OF NERSC PRODUCT 5 times
+        ice_age = np.nanmax(np.stack([ice_age[0::5, 0::5],
+                                      ice_age[1::5, 1::5],
+                                      ice_age[2::5, 2::5],
+                                      ice_age[3::5, 3::5],
+                                      ice_age[4::5, 4::5]]), axis=0)
 
-plt.subplot(2,2,2)
-plt.title('NERSC, 2_density', fontsize=5)
-plt.imshow(ice_age_f4, vmin=0, vmax=8, interpolation='nearest')
-plt.xticks([]);plt.yticks([])
+    ice_age[np.isnan(nsidc_age)] = np.nan
+    ice_age[nsidc_age == 0] = 0
 
-plt.subplot(2,2,3)
-plt.title('NERSC, 4_density', fontsize=5)
-plt.imshow(ice_age_f8, vmin=0, vmax=8, interpolation='nearest')
-plt.xticks([]);plt.yticks([])
+    ice_age_pro = reproject_ice(nsidc_dom, dst_dom, ice_age)
 
-plt.subplot(2,2,4)
-plt.title('NSIDC', fontsize=5)
-plt.imshow(nsidc_age, vmin=0, vmax=8, interpolation='nearest')
-plt.xticks([]);plt.yticks([])
-plt.tight_layout(w_pad=0)
-plt.savefig('iceage_nersc_nsidc_resolutions.png', dpi=300, bbox_inches='tight', pad_inches=0)
-plt.close()
-
-h_f2 = plt.hist(ice_age_f2[np.isfinite(ice_age_f2)], range(11))[0]
-h_f4 = plt.hist(ice_age_f4[np.isfinite(ice_age_f4)], range(11))[0]
-h_f8 = plt.hist(ice_age_f8[np.isfinite(ice_age_f8)], range(11))[0]
-h_nsidc = plt.hist(nsidc_age[np.isfinite(nsidc_age)], range(11))[0]
+    plt.close('all')
+    nmap = Nansatmap(dst_dom, resolution='l')
+    nmap.imshow(ice_age_pro, vmin=0, vmax=8, cmap='jet')
+    nmap.save('iceage_nsidc_f%02d.png' % factor, dpi=250)
+    
+    ice_ages.append(ice_age[np.isfinite(ice_age)])
+    
 plt.close('all')
-bins = np.arange(10)
-plt.bar(bins[2:], h_f2[2:], 0.2, color='b', label='x1')
-plt.bar(bins[2:]+0.2, h_f4[2:], 0.2, color='g', label='x2')
-plt.bar(bins[2:]+0.4, h_f8[2:], 0.2, color='r', label='x4')
-plt.bar(bins[2:]+0.6, h_nsidc[2:], 0.2, color='k', label='NSIDC')
-plt.legend(loc=9)
-plt.savefig('iceage_nersc_nsidc_histograms.png', dpi=75, bbox_inches='tight', pad_inches=0)
+plt.hist(ice_ages, bins)
+locs, vals = plt.yticks()
+plt.yticks(locs, locs*12500*12500/1000/1000/1000)
+plt.legend(factors, title='factor', loc=0, ncol=2)
+plt.xlabel('Sea Ice Age, years')
+plt.ylabel('area, $10^6 km^2$')
+plt.savefig('iceage_nsidc_histograms.png', dpi=150, bbox_inches='tight', pad_inches=0)
 plt.close()
+
+'''
+montage iceage_nsidc_f02.png\
+       iceage_nsidc_f04.png\
+       iceage_nsidc_f08.png\
+       -tile 3x1 -geometry +0+0 nsidc_age_mont00.png 
+'''

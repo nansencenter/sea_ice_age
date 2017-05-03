@@ -6,12 +6,14 @@ from dateutil.parser import parse
 import numpy as np
 import matplotlib.pyplot as plt
 from netCDF4 import Dataset
+import pygrib
 
 from nansat import Nansat
 from ovl_plugins.lib.interpolation import fill_gaps_nn
 from ovl_plugins.lib.lagrangian import rungekutta4
 from scipy.ndimage.interpolation import zoom
-from scipy.ndimage.filters import gaussian_filter
+from scipy.ndimage.filters import gaussian_filter, maximum_filter
+
 
 #### IMPLEMENT THE NSIDC ICE AGE ALGORITHM
 def nangaussian_filter(img, sigma):
@@ -24,7 +26,9 @@ def nangaussian_filter(img, sigma):
     imgw[np.isnan(imgw)] = 0
     imgw = gaussian_filter(imgw, sigma=sigma)
     
-    return img0 / imgw
+    img0 /= imgw
+    img0[np.isnan(img)] = np.nan
+    return img0
 
 def zoom_nan(img, factor, order=1, sigma=0):
     ''' Increase resolution of image with gaps  filled by nan
@@ -103,14 +107,40 @@ def get_ice_conc(date, n=0):
     ice_conc[status_flag == 102] = -102 # unclassified (edge)
     return ice_conc
     
+def get_ice_conc_grb(idir, idate, n=0):
+    ''' Get ice concentration from downloaded GRIB file '''
+    sic_files = glob.glob(idir + 'ice_conc*%s????.grb' % idate.strftime('%Y%m%d'))
+
+    if len(sic_files) == 0:
+        print 'NO ', idate, 
+        idate += dt.timedelta(1)
+        print 'TRY ', idate
+        return get_ice_conc_grb(idir, idate, n=n+1)
+
+    ifile = sic_files[0]
+    grbs = pygrib.open(ifile)
+    for grb in grbs:
+        if 'Ice cover' in grb['name']:
+            break
+    c = np.flipud(grb.data()[0])
+    if grbs.messagenumber == 1:
+        # OLD
+        pole_mask = c.mask
+        pole_mask = maximum_filter(pole_mask, 3)
+        c_f = fill_gaps_nn(c.data, 10, pole_mask)
+        c_f[np.isnan(c_f)] = 100
+        c_f[c_f < 0] = np.nan
+    else:
+        # NEW
+        c_f = c.data
+        c_f[c.mask] = np.nan
+        
+    return c_f
 
 def read_uvc_osi(ifile, concDomain):
     ''' Load U,V and ice mask from OSISAF file '''
     print ifile
-    n0 = Nansat(ifile)
-    status_flag = n0['status_flag']
-    u = n0['dX']*1000/60/60/48
-    v = n0['dY']*1000/60/60/48
+    u,v,status_flag = get_uvf_osi(ifile)
 
     datestr = os.path.basename(ifile).split('_')[-1].split('-')[0]
     date = dt.datetime(2010,1,1).strptime(datestr, '%Y%m%d%H%S')
@@ -120,6 +150,19 @@ def read_uvc_osi(ifile, concDomain):
     c = concN[1]
     
     return u,v,c
+
+def get_uvf_osi(ifile):
+    ''' Load U,V status flag from OSISAF LR drift file '''
+    print ifile
+    n0 = Nansat(ifile, mapperName='generic')
+    status_flag = n0['status_flag']
+    u = n0['dX']*1000/60/60/48
+    if n0.has_band('dY_v1p4'):
+        dY = n0['dY_v1p4']
+    else:
+        dY = n0['dY']
+    v = dY*1000/60/60/48
+    return u, v, status_flag
 
 def read_uv_osi_filled(ifile, factor=1, order=1, sigma=0):
     ''' Load U,V and ice mask from OSISAF file with gaps filled '''
@@ -136,19 +179,50 @@ def read_uv_osi_filled(ifile, factor=1, order=1, sigma=0):
 
     return u,v,c
 
+def get_uvc_filled_grb(sid_file, sid_dom, sic_dir, sic_dom, nn_dst=5, sigma=2, **kwargs):
+    ''' Load, resample and fill gaps in UV data using C'''
+    ## ONLY LOAD PRESAVED
+    data = np.load(sid_file)
+    return data['u'], data['v'], data['c']
+    # read raw U,V,flag,date in original OSI projection
+    u,v,f = get_uvf_osi(sid_file)
+    uvdate = get_osi_date(sid_file)
+
+    # read concnetration from corresponding grib file
+    c = get_ice_conc_grb(sic_dir, uvdate)
+
+    uv_pro = []
+    for uv in [u,v]:
+        # upscale U,V to the grid of C
+        uvp = reproject_ice(sid_dom, sic_dom, uv)
+        # fill LAND with 0 speed
+        uvp[np.isnan(c)] = 0
+        # extrapolate U,V (from ice and land onto empty pixels)
+        uvp = fill_gaps_nn(uvp, nn_dst)
+        # replace WATER pixels with NAN
+        uvp[c == 0] = np.nan
+        # replace LAND pixels with NAN
+        uvp[np.isnan(c)] = np.nan
+        # smooth upscaled U,V
+        uvp = nangaussian_filter(uvp, sigma)
+        uv_pro.append(uvp)
+
+    return uv_pro[0], uv_pro[1], c
+
 def get_osi_date(osi_file):
     ''' Get date of OSISAF file '''
     return parse(os.path.basename(osi_file).split('_')[-1][:8])
     
-def reproject_ice(d0, d1, ice0):
+def reproject_ice(d0, d1, ice0, eResampleAlg=0):
     ''' Convert ice product from one projection to another '''
     n = Nansat(domain=d0, array=ice0)
-    n.reproject(d1, addmask=False, blockSize=10)
+    n.reproject(d1, addmask=False, eResampleAlg=eResampleAlg, blockSize=10)
     return n[1]
 
 def propagate_from(i0, ifiles, reader=read_uv_nsidc, res=25000, factor=2,
                     h=60*60*24*7, repro=None, odir='./',
-                    saveice=True, savexy=False):
+                    saveice=True, savexy=False,
+                    **kwargs):
     ''' Apply NSIDC algorithm for ice age 
     Input:
         i0, index of file to start from
@@ -162,8 +236,7 @@ def propagate_from(i0, ifiles, reader=read_uv_nsidc, res=25000, factor=2,
     Output:
         None. Files with sea ice age.
     '''
-        
-    u0, v0, c0 = reader(ifiles[i0])
+    u0, v0, c0 = reader(ifiles[i0], **kwargs)
 
     x, y = np.meshgrid(range(u0.shape[1]), range(u0.shape[0], 0, -1))
     x *= res
@@ -179,7 +252,7 @@ def propagate_from(i0, ifiles, reader=read_uv_nsidc, res=25000, factor=2,
 
     for i in range(i0, len(ifiles)):
         print os.path.basename(ifiles[i0]), os.path.basename(ifiles[i])
-        u1, v1, c1 = reader(ifiles[i])
+        u1, v1, c1 = reader(ifiles[i], **kwargs)
         x1, y1 = rungekutta4(x, y, u0, v0, u1, v1, x0, y0, h)
         u0, v0, x0, y0 = u1, v1, x1, y1
 
@@ -216,7 +289,8 @@ def get_icemap_dates(icemap_file):
 def propagate_from_newprop(i0, ifiles, reader=read_uv_nsidc, get_date=get_nsidc_date,
                            res=25000, factor=1, order=1, sigma=0,
                            h=60*60*24*7, repro=None, odir='./', conc=False,
-                           min_flux=0):
+                           min_flux=0,
+                           **kwargs):
     ''' Apply NERSC algorithm for ice age 
     Input:
         i0, index of file to start from
@@ -232,17 +306,20 @@ def propagate_from_newprop(i0, ifiles, reader=read_uv_nsidc, get_date=get_nsidc_
         None. Files with sea ice age.
     '''
     # get initial ice mask and drift
-    u0, v0, f0 = reader(ifiles[i0], factor=factor, order=order, sigma=sigma)
+    u0, v0, c0 = reader(ifiles[i0], factor=factor, order=order, sigma=sigma, **kwargs)
     d0 = get_date(ifiles[i0])
     
     # find files with ice age produced from previous years
     ice0files = sorted(glob.glob(odir + '*%s.npz' % d0.strftime('%Y-%m-%d')))
 
     # initialize ice age fraction map and set all concentrations to 100% 
-    ice0 = np.zeros(f0.shape)  # water is zero age old
-    ice0[f0 > 0] = 1 # on 1 october all ice is 1 year old
-
-    # reduce 100% concentration by concentrations of older ice
+    if conc:
+        ice0 = c0 / 100.
+    else:
+        ice0 = np.zeros(c0.shape)  # water is zero age old
+        ice0[c0 > 0] = 1 # on 1 october all ice is 1 year old
+    
+    # reduce initial concentration by concentrations of older ice
     for ice0file in ice0files:
         ice0d0, ice0d1 = get_icemap_dates(ice0file)
         if ice0d0.year < d0.year:
@@ -251,8 +328,8 @@ def propagate_from_newprop(i0, ifiles, reader=read_uv_nsidc, get_date=get_nsidc_
             ice0 -= ice0prev
 
     # fix negative concentration
-    ice0[f0 <= 0] = 0
-    #ice0[ice0 < 0] = 0
+    #ice0[f0 <= 0] = 0
+    ice0[ice0 < 0] = 0
 
     # save initiation day YYYY.WW-YYYY.WW
     ofile = '%s/icemap_%s_%s.npz' % (odir,
@@ -265,9 +342,18 @@ def propagate_from_newprop(i0, ifiles, reader=read_uv_nsidc, get_date=get_nsidc_
     k = 0
     # loop over files with ice drift
     for i in range(i0, len(ifiles)-1):
+        d1 = get_date(ifiles[i+1])
+        ofile = '%s/icemap_%s_%s.npz' % (odir,
+                            d0.strftime('%Y-%m-%d'),
+                            d1.strftime('%Y-%m-%d'))
+        # skip processed
+        if os.path.exists(ofile):
+            ice0 = np.load(ofile)['ice']
+            continue
+            
         print os.path.basename(ifiles[i0]), os.path.basename(ifiles[i])
         # read U,V,C,T
-        u, v, f = reader(ifiles[i], factor=factor, order=order, sigma=sigma)
+        u, v, c = reader(ifiles[i], factor=factor, order=order, sigma=sigma, **kwargs)
         d = get_date(ifiles[i])
 
         # increment of coordinates
@@ -346,8 +432,7 @@ def propagate_from_newprop(i0, ifiles, reader=read_uv_nsidc, get_date=get_nsidc_
         bincount = np.bincount(idx, w)
         ice1.flat[:bincount.size] += bincount
         
-        d1 = get_date(ifiles[i+1])
-        
+       
         # ice1: sum of fluxes for a given date
         # it should be corrected by older ice
 
@@ -365,7 +450,7 @@ def propagate_from_newprop(i0, ifiles, reader=read_uv_nsidc, get_date=get_nsidc_
         
         # use SIC
         if conc:
-            ice_conc = f / 100.
+            ice_conc = c / 100.
         else:
             ice_conc = np.ones_like(sum_prev_ice1)
 
@@ -375,13 +460,8 @@ def propagate_from_newprop(i0, ifiles, reader=read_uv_nsidc, get_date=get_nsidc_
         ice1[ice1 > max_ice_increment] = max_ice_increment[ice1 > max_ice_increment]
 
         ice0 = ice1
-
-        ofile = '%s/icemap_%s_%s.npz' % (odir,
-                            d0.strftime('%Y-%m-%d'),
-                            d1.strftime('%Y-%m-%d'))
         np.savez_compressed(ofile, ice=ice0)
 
-        k += 1
 
 def collect_age(rfiles):
     ''' Compute MAX ice age from several ice age fractions ''' 
