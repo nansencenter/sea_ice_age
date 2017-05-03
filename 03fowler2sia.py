@@ -3,23 +3,13 @@ import glob
 import numpy as np
 import matplotlib.pyplot as plt
 
-from ovl_plugins.lib.lagrangian import rungekutta4
 from nansat import *
 from iceagelib import *
 
-
 #### COMPUTE SIA USING FOWLER METHOD (MAX AGE IN BIN)
-idir = '/files/sea_ice_age/fowler_nsidc_1985_f02/'
-ifiles = sorted(glob.glob(idir + '*.npz'))
+#save_max_age('/files/sea_ice_age/fowler_nsidc_1985_f02/', 1)
+save_max_age('/files/sea_ice_age/fowler_nsidc_1985_f04/', 2)
 
-idates = map(get_icemap_dates, ifiles)
-dates0, dates1 = zip(*idates)
-dst_dates = sorted(set(dates1))
-
-dst_date = dst_dates[100]
-msk = '%s*%s' % (idir, dst_date.strftime('%Y-%m-%d.npz'))
-rfiles = sorted(glob.glob(msk), reverse=True)
-ice_age = collect_age(rfiles)
 
 """
 idir_uv = '/files/nsidc0116_icemotion_vectors_v3/'
@@ -53,22 +43,6 @@ for factor in factors:
     rfiles = sorted(glob.glob(odir + '*%04d.%02d.n.v3.bin_icemap.npz' % (1984, 52)), reverse=True)
     ice_age = collect_age(rfiles)
 
-    if factor == 4:
-        ice_age = np.nanmax(np.stack([ice_age[0::2, 0::2],
-                                      ice_age[1::2, 1::2]]), axis=0)
-    elif factor == 8:
-        ## REDUCE RESOLUTION OF NERSC PRODUCT 4 times
-        ice_age = np.nanmax(np.stack([ice_age[0::4, 0::4],
-                                      ice_age[1::4, 1::4],
-                                      ice_age[2::4, 2::4],
-                                      ice_age[3::4, 3::4]]), axis=0)
-    elif factor == 10:
-        ## REDUCE RESOLUTION OF NERSC PRODUCT 5 times
-        ice_age = np.nanmax(np.stack([ice_age[0::5, 0::5],
-                                      ice_age[1::5, 1::5],
-                                      ice_age[2::5, 2::5],
-                                      ice_age[3::5, 3::5],
-                                      ice_age[4::5, 4::5]]), axis=0)
 
     ice_age[np.isnan(nsidc_age)] = np.nan
     ice_age[nsidc_age == 0] = 0

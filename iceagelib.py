@@ -417,11 +417,10 @@ def propagate_from_newprop(i0, ifiles, reader=get_nsidc_uv, get_date=get_nsidc_d
         ice0 = ice1
         np.savez_compressed(ofile, ice=ice0)
 
-
 def collect_age(rfiles):
     ''' Compute MAX ice age from several ice age fractions ''' 
     age0 = np.load(rfiles[0])['ice']
-    ice_age = np.ones(age0.shape)
+    ice_age = age0 + 1 # FYI  = 1; MYI = 2
     theage = 2
     for rfile in rfiles:
         age = np.load(rfile)['ice']
@@ -490,3 +489,45 @@ def add_fyi(ice_age_weights, ice_age_mean, ice_mask):
     ice_age_mean[np.isnan(ice_mask)] = np.nan
     
     return ice_age_weights, ice_age_mean
+
+def save_max_age(idir, sia_factor, vmin=0, vmax=8):
+    ''' Use Fowler method to compute SIA (max age in bin) '''
+    odir = idir + 'sia/'
+    if not os.path.exists(odir):
+        os.makedirs(odir)
+
+    ifiles = sorted(glob.glob(idir + '*.npz'))
+
+    idates = map(get_icemap_dates, ifiles)
+    dates0, dates1 = zip(*idates)
+    dst_dates = sorted(set(dates1))
+
+    k = 0
+    for dst_date in dst_dates:
+        print dst_date
+        msk = '%s*%s' % (idir, dst_date.strftime('%Y-%m-%d.npz'))
+        rfiles = sorted(glob.glob(msk), reverse=True)
+        sia = collect_age(rfiles)
+
+        if sia_factor == 2:
+            ## REDUCE RESOLUTION OF NERSC PRODUCT 2 times
+            sia = np.nanmax(np.stack([sia[0::2, 0::2],
+                                      sia[1::2, 1::2]]), axis=0)
+        elif sia_factor == 4:
+            ## REDUCE RESOLUTION OF NERSC PRODUCT 4 times
+            sia = np.nanmax(np.stack([sia[0::4, 0::4],
+                                      sia[1::4, 1::4],
+                                      sia[2::4, 2::4],
+                                      sia[3::4, 3::4]]), axis=0)
+        elif sia_factor == 5:
+            ## REDUCE RESOLUTION OF NERSC PRODUCT 5 times
+            sia = np.nanmax(np.stack([sia[0::5, 0::5],
+                                      sia[1::5, 1::5],
+                                      sia[2::5, 2::5],
+                                      sia[3::5, 3::5],
+                                      sia[4::5, 4::5]]), axis=0)
+
+        ofile = '%s/%s_sia.npz' % (odir, dst_date.strftime('%Y-%m-%d'))
+        np.savez_compressed(ofile, sia=sia)
+        plt.imsave('%s/sia_%05d.png' % (odir, k), sia, cmap='jet', vmin=vmin, vmax=vmax)
+        k += 1
