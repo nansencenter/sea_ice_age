@@ -28,13 +28,10 @@ years = [1978, 1979, 1980, 1981, 1982, 1983, 1984]
 weeks = [44, 35, 35, 35, 35, 35, 35]
 i_end = get_nsidc_i_of_file(1984, 52, nsidc_sid_files)
 
-
-### TESTING
-factors = [2]
-years = [1978]
-weeks = [44]
-i_end = get_nsidc_i_of_file(1979, 52, nsidc_sid_files)
-
+## TEST
+#years = [1978]
+#weeks = [44]
+#i_end = get_nsidc_i_of_file(1979, 10, nsidc_sid_files)
 
 # for all zoom factors
 for factor in factors:

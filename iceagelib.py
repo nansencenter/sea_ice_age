@@ -195,7 +195,7 @@ def propagate_fowler(i_start, i_end, ifiles, reader, get_date, src_res, h, facto
     d0 = get_date(ifiles[i_start])
 
     # save initiation day YYYY.WW-YYYY.WW
-    ice0 = np.zeros(c.shape)
+    ice0 = np.zeros(c.shape) + np.nan
     ice0[c > 0] = 1
     ofile = '%s/icemap_%s_%s.npz' % (odir,
                         d0.strftime('%Y-%m-%d'),
@@ -221,18 +221,18 @@ def propagate_fowler(i_start, i_end, ifiles, reader, get_date, src_res, h, facto
                (rows >= 0) *
                (cols < u.shape[1]) *
                (rows < u.shape[0]))
-        ice1 = np.zeros(u.shape)
-        ice1[rnd(rows[gpi]), rnd(cols[gpi])] = 1
 
-        d1 = get_date(ifile)
+        ice = np.zeros(u.shape) + np.nan
+        u, v, c = reader(ifile, src_res, h, factor, **kwargs)
+        d = get_date(ifile)
+        ice[c > 0] = 0        
+        ice[rnd(rows[gpi]), rnd(cols[gpi])] = 1
         ofile = '%s/icemap_%s_%s.npz' % (odir,
                             d0.strftime('%Y-%m-%d'),
-                            d1.strftime('%Y-%m-%d'))
-        np.savez_compressed(ofile, ice=ice1)
+                            d.strftime('%Y-%m-%d'))
+        np.savez_compressed(ofile, ice=ice)
         if savexy:
             np.savez_compressed(ofile+'_xy.npz', rows=rows, cols=cols)
-        
-        u, v, c = reader(ifile, src_res, h, factor, **kwargs)
 
 def get_icemap_dates(icemap_file):
     ''' Get dates of from ice map filename''' 
@@ -436,7 +436,6 @@ def vis_ice_npz(pref, vmin=0, vmax=1, nfiles=None):
     k = 0
     for ifile in ifiles:
         ice = np.load(ifile)['ice']
-        ice[ice <= vmin] = np.nan
         plt.imsave('%s_frame_%05d.png' % (pref, k), ice, cmap='jet', vmin=vmin, vmax=vmax)
         k += 1
 
