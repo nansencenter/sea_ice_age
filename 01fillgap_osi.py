@@ -21,7 +21,7 @@ sic_dir = '/files/sea_ice_age/ice_conc_grb/'
 
 w = 0.5
 cMin = 15
-odir = '/files/sea_ice_age/osi405c_demo_archive_filled_tst/'
+odir = '/files/sea_ice_age/osi405c_demo_archive_filled_v1/'
 
 # OSISAF ICE CONC
 osi_nsr = NSR('+proj=stere +a=6378273 +b=6356889.44891 +lat_0=90 +lat_ts=70 +lon_0=-45')
@@ -30,12 +30,11 @@ sic_dom = Domain(osi_nsr, '-te -3850000 -5350000 3750000 5850000 -tr 10000 10000
 # OSISAF ICE DRIFT
 sid_dom = Domain(osi_nsr, '-te -3781250 -5281250 3656250 5781250 -tr 62500 62500')
 
-start = 0
+start = 700
 stop = None
 ## U/V files
-sid_files = sorted(glob.glob(sid_dir + 'ice_drift_nh_polstere-625_multi-oi_201[2,3,4,5,6,7]*.nc'))[start:stop]#[1585:]
+sid_files = sorted(glob.glob(sid_dir + 'ice_drift_nh_polstere-625_multi-oi_201[2,3,4,5,6,7]*.nc'))[start:stop]
 
-force = True
 us, vs, cs = [], [], []
 for i, sid_file in enumerate(sid_files):
     u, v, f = get_osi_uvf(sid_file)
@@ -54,8 +53,6 @@ for i, sid_file in enumerate(sid_files):
         continue
     
     ofile = os.path.basename(sid_files[i-2]) + '.npz'
-    if os.path.exists(os.path.join(odir, ofile)) and not force:
-        continue
 
     print 'Long:', ofile
     usa, vsa, csa = map(np.array, (us, vs, cs))

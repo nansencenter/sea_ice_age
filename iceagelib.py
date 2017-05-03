@@ -53,9 +53,10 @@ def zoom_nan(img, factor, order=1, sigma=0):
     
     return imgz
     
-
-def read_uv_nsidc(ifile, factor=1, order=1, sigma=0):
-    ''' Load U,V and ice mask from NSIDC file '''
+def get_nsidc_uv(ifile, src_res, h, factor=1, order=1, sigma=0):
+    ''' Load U,V and ice mask from NSIDC file
+    Return U,V in row/col pixels
+    '''
     d = np.fromfile(ifile, np.int16)
     u = d[0::3].reshape(361,361) / 1000. # m/s
     v = d[1::3].reshape(361,361) / 1000. # m/s
@@ -69,6 +70,9 @@ def read_uv_nsidc(ifile, factor=1, order=1, sigma=0):
         v = zoom_nan(v, factor, order=order, sigma=sigma)
         c = zoom_nan(c, factor, order=order, sigma=sigma)
 
+    u =  u * factor * h / src_res # pix
+    v = -v * factor * h / src_res # pix
+
     return u, v, c
 
 def get_nsidc_date(nsidc_file):
@@ -77,13 +81,13 @@ def get_nsidc_date(nsidc_file):
     w = int(os.path.basename(nsidc_file).split('.')[4])
     return dt.datetime(y, 1, 1) + dt.timedelta(w*7)
 
-def get_i_of_file_nsidc(year, week, ifiles):
+def get_nsidc_i_of_file(year, week, ifiles):
     ''' Find index of NSIDC file based on input date'''
     for i, ifile in enumerate(ifiles):
-        if '%04d.%0d' % (year, week) in ifile:
+        if '%04d.%02d' % (year, week) in ifile:
             return i
 
-def get_i_of_file_osi(year, month, day, ifiles):
+def get_osi_i_of_file(year, month, day, ifiles):
     ''' Find index of OSISAF file based on input date'''
     for i, ifile in enumerate(ifiles):
         if os.path.basename(ifile).split('_')[-1].startswith('%04d%02d%02d' % (year, month, day)):
@@ -166,65 +170,59 @@ def reproject_ice(d0, d1, ice0, eResampleAlg=0):
     n.reproject(d1, addmask=False, eResampleAlg=eResampleAlg, blockSize=10)
     return n[1]
 
-def propagate_from(i0, ifiles, reader=read_uv_nsidc, res=25000, factor=2,
-                    h=60*60*24*7, repro=None, odir='./',
-                    saveice=True, savexy=False,
-                    **kwargs):
+def propagate_fowler(i_start, i_end, ifiles, reader, get_date, src_res, h, factor,
+                   odir='./', savexy=False, **kwargs):
     ''' Apply NSIDC algorithm for ice age 
     Input:
         i0, index of file to start from
         ifiles: list of files with U,V,C
         reader: function to read U,V,C
-        res: spatial resolution (m)
+        get_date: function to read date
+        src_res: spatial resolution of source dataset (m)
         factor: zoom factor
         h: time step (sec)
-        repro: tuple with Domains for ice reprojection
         odir: output directory
     Output:
-        None. Files with sea ice age.
+        None. Saves files with sea ice age.
     '''
-    u0, v0, c0 = reader(ifiles[i0], **kwargs)
+    # read initial conditions
+    u, v, c = reader(ifiles[i_start], src_res, h, factor, **kwargs)
+    d0 = get_date(ifiles[i_start])
 
-    x, y = np.meshgrid(range(u0.shape[1]), range(u0.shape[0], 0, -1))
-    x *= res
-    y *= res
+    # save initiation day YYYY.WW-YYYY.WW
+    ice0 = np.zeros(c.shape)
+    ice0[c > 0] = 1
+    ofile = '%s/icemap_%s_%s.npz' % (odir,
+                        d0.strftime('%Y-%m-%d'),
+                        d0.strftime('%Y-%m-%d'))
+    np.savez_compressed(ofile, ice=ice0)
 
-    pt_cols, pt_rows = np.meshgrid(range(int(x.shape[1]*factor)),
-                                   range(int(x.shape[0]*factor), 0, -1))
-    x0 = pt_cols * res / factor
-    y0 = pt_rows * res / factor
-    # filter out water pixels
-    #x0 = x0[c0 > 15]
-    #y0 = y0[c0 > 15]
+    # define initial coordinates
+    cols, rows = np.meshgrid(np.arange(u.shape[1], dtype=float),
+                             np.arange(u.shape[0], dtype=float))
 
-    for i in range(i0, len(ifiles)):
-        print os.path.basename(ifiles[i0]), os.path.basename(ifiles[i])
-        u1, v1, c1 = reader(ifiles[i], **kwargs)
-        x1, y1 = rungekutta4(x, y, u0, v0, u1, v1, x0, y0, h)
-        u0, v0, x0, y0 = u1, v1, x1, y1
+    # loop through input files
+    for ifile in ifiles[i_start+1:i_end+1]:
+        print 'PROP: ', os.path.basename(ifile)
+        cols += u
+        rows += v
+        gpi = (np.isfinite(cols * rows) *
+               (cols >= 0) *
+               (rows >= 0) *
+               (cols < u.shape[1]) *
+               (rows < u.shape[0]))
+        ice1 = np.zeros(u.shape)
+        ice1[rows[gpi].astype(int), cols[gpi].astype(int)] = 1
 
-        # U/V res
-        c1 = (x1 / (res / factor)).astype(np.int16)
-        r1 = (x.shape[0] * factor - y1 / (res / factor)).astype(np.int16)
-        gpi = (np.isfinite(c1 * r1) *
-               (c1 >= 0) *
-               (r1 >= 0) *
-               (c1 < x0.shape[1]) *
-               (r1 < x0.shape[0]))
-        ice1 = np.zeros(x0.shape)
-        
-        ice1[r1[gpi], c1[gpi]] = 1
-        
-        if repro is not None:
-            ice1 = reproject_ice(repro[0], repro[1], ice1)
-
-        ofile = '%s/%s_%s_icemap' % (odir,
-                                    os.path.basename(ifiles[i0]),
-                                    os.path.basename(ifiles[i]))
-        if saveice:
-            np.savez_compressed(ofile+'.npz', ice=ice1.astype(np.bool))
+        d1 = get_date(ifile)
+        ofile = '%s/icemap_%s_%s.npz' % (odir,
+                            d0.strftime('%Y-%m-%d'),
+                            d1.strftime('%Y-%m-%d'))
+        np.savez_compressed(ofile, ice=ice1)
         if savexy:
-            np.savez_compressed(ofile+'_xy.npz', x1=x1, y1=y1)
+            np.savez_compressed(ofile+'_xy.npz', rows=rows, cols=cols)
+        
+        u, v, c = reader(ifile, src_res, h, factor, **kwargs)
 
 def get_icemap_dates(icemap_file):
     ''' Get dates of from ice map filename''' 
@@ -233,7 +231,7 @@ def get_icemap_dates(icemap_file):
     d1 = parse(nameparts[-1])
     return d0, d1
 
-def propagate_from_newprop(i0, ifiles, reader=read_uv_nsidc, get_date=get_nsidc_date,
+def propagate_from_newprop(i0, ifiles, reader=get_nsidc_uv, get_date=get_nsidc_date,
                            res=25000, factor=1, order=1, sigma=0,
                            h=60*60*24*7, repro=None, odir='./', conc=False,
                            min_flux=0,
