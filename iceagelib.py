@@ -89,33 +89,15 @@ def get_i_of_file_osi(year, month, day, ifiles):
         if os.path.basename(ifile).split('_')[-1].startswith('%04d%02d%02d' % (year, month, day)):
             return i
 
-def get_ice_conc(date, n=0):
-    ''' Get ice concentration from OSISAF for given date '''
-    print date, n
-    url_template = 'http://thredds.met.no/thredds/dodsC/myocean/siw-tac/siw-metno-glo-osisaf/conc/%Y/%m/ice_conc_nh_polstere-100_multi_%Y%m%d1200.nc'
-    url = date.strftime(url_template)
-    try:
-        ds = Dataset(url)
-    except IOError:
-        date = date + dt.timedelta(1)
-        return get_ice_conc(date, n=n+1)
-    ice_conc = np.array(ds.variables['ice_conc'][:][0])
-    status_flag = np.array(ds.variables['status_flag'][:][0])
-    ds.close()
-    ice_conc[status_flag == 100] = -100 # land
-    ice_conc[status_flag == 101] = -101 # missing
-    ice_conc[status_flag == 102] = -102 # unclassified (edge)
-    return ice_conc
-    
-def get_ice_conc_grb(idir, idate, n=0):
-    ''' Get ice concentration from downloaded GRIB file '''
+def get_osi_sic(idir, idate, n=0):
+    ''' Get sea ice concentration from downloaded GRIB file '''
     sic_files = glob.glob(idir + 'ice_conc*%s????.grb' % idate.strftime('%Y%m%d'))
 
     if len(sic_files) == 0:
         print 'NO ', idate, 
         idate += dt.timedelta(1)
         print 'TRY ', idate
-        return get_ice_conc_grb(idir, idate, n=n+1)
+        return get_osi_sic(idir, idate, n=n+1)
 
     ifile = sic_files[0]
     grbs = pygrib.open(ifile)
@@ -137,23 +119,8 @@ def get_ice_conc_grb(idir, idate, n=0):
         
     return c_f
 
-def read_uvc_osi(ifile, concDomain):
-    ''' Load U,V and ice mask from OSISAF file '''
-    print ifile
-    u,v,status_flag = get_uvf_osi(ifile)
-
-    datestr = os.path.basename(ifile).split('_')[-1].split('-')[0]
-    date = dt.datetime(2010,1,1).strptime(datestr, '%Y%m%d%H%S')
-    ice_conc = get_ice_conc(date)
-    concN = Nansat(domain=concDomain, array=ice_conc)
-    concN.reproject(n0, addmask=False)
-    c = concN[1]
-    
-    return u,v,c
-
-def get_uvf_osi(ifile):
+def get_osi_uvf(ifile):
     ''' Load U,V status flag from OSISAF LR drift file '''
-    print ifile
     n0 = Nansat(ifile, mapperName='generic')
     status_flag = n0['status_flag']
     u = n0['dX']*1000/60/60/48
@@ -164,33 +131,8 @@ def get_uvf_osi(ifile):
     v = dY*1000/60/60/48
     return u, v, status_flag
 
-def read_uv_osi_filled(ifile, factor=1, order=1, sigma=0):
-    ''' Load U,V and ice mask from OSISAF file with gaps filled '''
-    u = np.load(ifile)['u']
-    v = np.load(ifile)['v']
-    c = np.load(ifile)['ice']
-    u[c == 0] = np.nan
-    v[c == 0] = np.nan
-
-    if factor != 1:
-        u = zoom_nan(u, factor, order=order, sigma=sigma)
-        v = zoom_nan(v, factor, order=order, sigma=sigma)
-        c = zoom_nan(c, factor, order=order, sigma=sigma)
-
-    return u,v,c
-
-def get_uvc_filled_grb(sid_file, sid_dom, sic_dir, sic_dom, nn_dst=5, sigma=2, **kwargs):
-    ''' Load, resample and fill gaps in UV data using C'''
-    ## ONLY LOAD PRESAVED
-    data = np.load(sid_file)
-    return data['u'], data['v'], data['c']
-    # read raw U,V,flag,date in original OSI projection
-    u,v,f = get_uvf_osi(sid_file)
-    uvdate = get_osi_date(sid_file)
-
-    # read concnetration from corresponding grib file
-    c = get_ice_conc_grb(sic_dir, uvdate)
-
+def fill_osi_uv(u, v, c, sid_dom, sic_dom, nn_dst=5, sigma=2, **kwargs):
+    ''' Resample and fill gaps in UV data using C'''
     uv_pro = []
     for uv in [u,v]:
         # upscale U,V to the grid of C
@@ -208,6 +150,11 @@ def get_uvc_filled_grb(sid_file, sid_dom, sic_dir, sic_dom, nn_dst=5, sigma=2, *
         uv_pro.append(uvp)
 
     return uv_pro[0], uv_pro[1], c
+
+def get_osi_uvc_filled(sid_file):
+    ''' Load presaved SID and SIC '''
+    data = np.load(sid_file)
+    return data['u'], data['v'], data['c']
 
 def get_osi_date(osi_file):
     ''' Get date of OSISAF file '''

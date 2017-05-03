@@ -10,6 +10,8 @@ from nansat import *
 
 from iceagelib import *
 
+## FILL GAPS IN OSI-SAF SEA ICE DRIFT
+
 # get sea ice concentration
 #wget -r  -nc -nd -A 'ice_conc_nh*.grb.gz' ftp://osisaf.met.no/archive/ice/conc/2017/
 #wget -r  -nc -nd -w 0.5 -A 'ice_conc_nh_20*.grb.gz' ftp://osisaf.met.no/archive/ice/conc/2014/
@@ -19,16 +21,14 @@ sic_dir = '/files/sea_ice_age/ice_conc_grb/'
 
 w = 0.5
 cMin = 15
-odir = '/files/sea_ice_age/osi405c_demo_archive_filled_new/'
+odir = '/files/sea_ice_age/osi405c_demo_archive_filled_tst/'
 
 # OSISAF ICE CONC
 osi_nsr = NSR('+proj=stere +a=6378273 +b=6356889.44891 +lat_0=90 +lat_ts=70 +lon_0=-45')
 sic_dom = Domain(osi_nsr, '-te -3850000 -5350000 3750000 5850000 -tr 10000 10000')
-#x_pro, y_pro = sic_dom.get_geolocation_grids(dstSRS=NSR(osi_nsr))
 
 # OSISAF ICE DRIFT
 sid_dom = Domain(osi_nsr, '-te -3781250 -5281250 3656250 5781250 -tr 62500 62500')
-#x, y = sid_dom.get_geolocation_grids(dstSRS=NSR(osi_nsr))
 
 start = 0
 stop = None
@@ -38,12 +38,15 @@ sid_files = sorted(glob.glob(sid_dir + 'ice_drift_nh_polstere-625_multi-oi_201[2
 force = True
 us, vs, cs = [], [], []
 for i, sid_file in enumerate(sid_files):
-    u, v, c = get_uvc_filled_grb(sid_file, sid_dom=sid_dom, sic_dir=sic_dir, sic_dom=sic_dom)
+    u, v, f = get_osi_uvf(sid_file)
+    sid_date = get_osi_date(sid_file)
+    c = get_osi_sic(sic_dir, sid_date)
+    u, v, c = fill_osi_uv(u, v, c, sid_dom=sid_dom, sic_dom=sic_dom)
     us.append(u)
     vs.append(v)
     cs.append(c)
     
-    if len(us) < 6:
+    if len(us) < 5:
         ofile = os.path.basename(sid_file) + '.npz'
         if not os.path.exists(os.path.join(odir, ofile)):
             print 'Short:', ofile
@@ -55,10 +58,6 @@ for i, sid_file in enumerate(sid_files):
         continue
 
     print 'Long:', ofile
-    us.pop(0)
-    vs.pop(0)
-    cs.pop(0)
-    
     usa, vsa, csa = map(np.array, (us, vs, cs))
 
     # find nearest neigbour distance
@@ -78,12 +77,14 @@ for i, sid_file in enumerate(sid_files):
         # fill inn gaps in original U/V
         uv[np.isnan(uv)] = uvf[np.isnan(uv)]
     
-    np.savez(os.path.join(odir, ofile), u=usa[3], v=vsa[3], c=csa[3])
+    np.savez(os.path.join(odir, ofile), u=usa[2], v=vsa[2], c=csa[2])
+    us.pop(0)
+    vs.pop(0)
+    cs.pop(0)
         
-
 ofiles = sorted(glob.glob(odir + '*.npz'))[start:stop]
 for ofile in ofiles:
-    pngfile = 'new_fil_tst/' + os.path.basename(ofile)+'_spd.png'
+    pngfile = odir + 'png/' + os.path.basename(ofile)+'_spd.png'
     if not os.path.exists(pngfile) or force:
         print 'PNG:', os.path.basename(ofile)
         u = np.load(ofile)['u']
@@ -91,70 +92,3 @@ for ofile in ofiles:
         spd = np.hypot(u, v)
         plt.imsave(pngfile, spd)
     
-    '''
-    qstp = 1    
-    plt.quiver(x[::qstp, ::qstp],
-                y[::qstp, ::qstp],
-                u[::qstp, ::qstp],
-                v[::qstp, ::qstp],
-                scale=5, color='r',
-                )
-    qstp = 5
-    plt.quiver(x_pro[::qstp, ::qstp],
-                y_pro[::qstp, ::qstp],
-                uv_pro[0][::qstp, ::qstp],
-                uv_pro[1][::qstp, ::qstp],
-                scale=5)
-    plt.xlim([-2000000, 2000000])
-    plt.ylim([-2000000, 2000000])
-    plt.xticks([])
-    plt.yticks([])
-    plt.savefig(os.path.basename(uvfile)+'.png', dpi=400, pad_inches=0, bbox_inches='tight')
-    plt.close()
-    '''
-
-    
-
-raise
-
-c_pro = reproject_ice(osi_dom, dom, c)
-
-# read all u, v, conc
-uvf = np.stack(map(read_uvf_osi, ifiles))
-u = uvc[:, 0, :, :]
-v = uvc[:, 1, :, :]
-c = uvc[:, 2, :, :]
-
-cuv = [None, None, None]
-k = 0
-for prd in [c, u, v]:
-    prdk = np.array(prd)
-    if k == 0:
-        prdk[prdk < 0] = np.nan
-        
-    prd0 = np.array(prdk)
-    prdw = np.ones(prd.shape)
-    
-    prd0[np.isnan(prdk)] = 0
-    prdw[np.isnan(prdk)] = 0
-    
-    prd0g = gaussian_filter(prd0, w)
-    prdwg = gaussian_filter(prdw, w)
-    prdg = prd0g / prdwg
-    
-    prdf = np.array(prdk)
-    if k == 0:
-        prdf[c == -101] = prdg[c == -101]
-    else:
-        prdf[(cuv[0] > cMin) * np.isnan(prdk)] = prdg[(cuv[0] > cMin) * np.isnan(prdk)]
-        prdf[(cuv[0] > cMin) * np.isnan(prdf)] = 0
-
-    cuv[k] = prdf
-    k += 1
-
-for i, ifile in enumerate(ifiles):
-    ofile = odir + os.path.basename(ifile).replace('.nc', '.npz')
-    print 'Save', ofile
-    np.savez_compressed(ofile, ice=cuv[0][i], u=cuv[1][i], v=cuv[2][i])
-
-vis_drift_npz(odir, odir)
