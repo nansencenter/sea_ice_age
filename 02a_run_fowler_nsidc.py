@@ -21,19 +21,20 @@ h = 7 * 24 * 60 * 60 # temoral resolution (sec)
 
 nsidc_sid_files = sorted(glob.glob(nsidc_sid_dir + 'icemotion.grid.week*.bin'))
 factors = [2, 4, 8]
-odirmsk = 'nsidc_1985_f%02d/'
+odirmsk = 'fowler_nsidc_1985_f%02d/'
 
 ## 1979 - 1984
-i_starts = [
-    get_nsidc_i_of_file(1978, 44, nsidc_sid_files),
-    get_nsidc_i_of_file(1979, 35, nsidc_sid_files),
-    get_nsidc_i_of_file(1980, 35, nsidc_sid_files),
-    get_nsidc_i_of_file(1981, 35, nsidc_sid_files),
-    get_nsidc_i_of_file(1982, 35, nsidc_sid_files),
-    get_nsidc_i_of_file(1983, 35, nsidc_sid_files),
-    get_nsidc_i_of_file(1984, 35, nsidc_sid_files)
-]
+years = [1978, 1979, 1980, 1981, 1982, 1983, 1984]
+weeks = [44, 35, 35, 35, 35, 35, 35]
 i_end = get_nsidc_i_of_file(1984, 52, nsidc_sid_files)
+
+
+### TESTING
+factors = [2]
+years = [1978]
+weeks = [44]
+i_end = get_nsidc_i_of_file(1979, 52, nsidc_sid_files)
+
 
 # for all zoom factors
 for factor in factors:
@@ -41,5 +42,7 @@ for factor in factors:
     if not os.path.exists(odir):
         os.makedirs(odir)
     # for all start years
-    for i_start in i_starts:
+    for yy, ww in zip(years, weeks):
+        i_start = get_nsidc_i_of_file(yy, ww, nsidc_sid_files)
         propagate_fowler(i_start, i_end, nsidc_sid_files, reader, get_date, src_res, h, factor, odir=odir)
+        vis_ice_npz(odir + 'icemap_%04d' % yy)

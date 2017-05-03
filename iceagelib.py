@@ -155,10 +155,14 @@ def fill_osi_uv(u, v, c, sid_dom, sic_dom, nn_dst=5, sigma=2, **kwargs):
 
     return uv_pro[0], uv_pro[1], c
 
-def get_osi_uvc_filled(sid_file):
+def get_osi_uvc_filled(sid_file, src_res=10000, h=24*60*60, factor=1):
     ''' Load presaved SID and SIC '''
     data = np.load(sid_file)
-    return data['u'], data['v'], data['c']
+    u, v, c = data['u'], data['v'], data['c']
+    u =  u * factor * h / src_res # pix
+    v = -v * factor * h / src_res # pix
+
+    return u, v, c
 
 def get_osi_date(osi_file):
     ''' Get date of OSISAF file '''
@@ -185,6 +189,7 @@ def propagate_fowler(i_start, i_end, ifiles, reader, get_date, src_res, h, facto
     Output:
         None. Saves files with sea ice age.
     '''
+    rnd = lambda x: np.round(x).astype(int)
     # read initial conditions
     u, v, c = reader(ifiles[i_start], src_res, h, factor, **kwargs)
     d0 = get_date(ifiles[i_start])
@@ -200,19 +205,24 @@ def propagate_fowler(i_start, i_end, ifiles, reader, get_date, src_res, h, facto
     # define initial coordinates
     cols, rows = np.meshgrid(np.arange(u.shape[1], dtype=float),
                              np.arange(u.shape[0], dtype=float))
-
+    gpi = np.isfinite(cols) # all pixels are good
     # loop through input files
     for ifile in ifiles[i_start+1:i_end+1]:
         print 'PROP: ', os.path.basename(ifile)
-        cols += u
-        rows += v
+        cols_gpi = cols[gpi] + u[rnd(rows[gpi]), rnd(cols[gpi])]
+        rows_gpi = rows[gpi] + v[rnd(rows[gpi]), rnd(cols[gpi])]
+        cols[gpi] = cols_gpi
+        rows[gpi] = rows_gpi
+        cols[~gpi] = np.nan
+        rows[~gpi] = np.nan
+        
         gpi = (np.isfinite(cols * rows) *
                (cols >= 0) *
                (rows >= 0) *
                (cols < u.shape[1]) *
                (rows < u.shape[0]))
         ice1 = np.zeros(u.shape)
-        ice1[rows[gpi].astype(int), cols[gpi].astype(int)] = 1
+        ice1[rnd(rows[gpi]), rnd(cols[gpi])] = 1
 
         d1 = get_date(ifile)
         ofile = '%s/icemap_%s_%s.npz' % (odir,
