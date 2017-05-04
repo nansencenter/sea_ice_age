@@ -3,11 +3,13 @@ import glob
 import datetime as dt
 import numpy as np
 import matplotlib.pyplot as plt
+import matplotlib as mpl
 
 from ovl_plugins.lib.lagrangian import rungekutta4
 from nansat import *
 from iceagelib import *
 
+from cmocean import cm
 
 ## FIGURE 2. COMPARISON OF SIA with different density
 """
@@ -17,6 +19,20 @@ montage\
  /files/sea_ice_age/fowler_nsidc_1985_f08/sia/1984-12-30_sia.npz_sia.png\
  -tile 3x1 -geometry +0+0 figure_02_sia_compar_density.png 
 """
+
+# colorbar for SIA
+cmap = cm.thermal_r
+cmaplist = [cmap(i) for i in range(cmap.N)]
+cmap = cmap.from_list('Custom cmap', cmaplist, cmap.N)
+bounds = np.linspace(1,9,9)
+norm = mpl.colors.BoundaryNorm(bounds, cmap.N)
+
+fig = plt.figure(figsize=(8, 1))
+ax2 = fig.add_axes([0.05, 0.5, 0.9, 0.3])
+cb = mpl.colorbar.ColorbarBase(ax2, cmap=cmap, norm=norm, spacing='proportional', ticks=bounds, boundaries=bounds, format='%1i', orientation='horizontal')
+cb.set_label('Sea Ice Age, years', size=12)
+plt.savefig('figure_02_sia_legend.png', dpi=150, bbox_inches='tight', pad_inches=0)
+plt.close()
 
 ## FIGURE 3. SIA density historgrams
 factors = [2,4,8]
@@ -36,8 +52,10 @@ plt.xlabel('Sea Ice Age, years')
 plt.ylabel('area, $10^6 km^2$')
 plt.savefig('figure_03_sia_dens_histo.png', dpi=150, bbox_inches='tight', pad_inches=0)
 plt.close()
-
 raise
+
+## FIGURE 4. Components of FOWLER/NSIDC
+
 
 ## FIGURE 8. COMPARISON OF SIA with different methods
 """
