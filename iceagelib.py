@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 from netCDF4 import Dataset
 import pygrib
 
-from nansat import Nansat
+from nansat import Nansat, Nansatmap
 from ovl_plugins.lib.interpolation import fill_gaps_nn
 from ovl_plugins.lib.lagrangian import rungekutta4
 from scipy.ndimage.interpolation import zoom
@@ -531,3 +531,11 @@ def save_max_age(idir, sia_factor, vmin=0, vmax=8):
         np.savez_compressed(ofile, sia=sia)
         plt.imsave('%s/sia_%05d.png' % (odir, k), sia, cmap='jet', vmin=vmin, vmax=vmax)
         k += 1
+
+def make_map(ifile, prod, src_dom, dst_dom, vmin=0, vmax=5, dpi=250, cmap='jet'):
+    ''' Make map with a product '''
+    sia = np.load(ifile)[prod]
+    sia_pro = reproject_ice(src_dom, dst_dom, sia)
+    nmap = Nansatmap(dst_dom, resolution='l')
+    nmap.imshow(sia_pro, vmin=vmin, vmax=vmax, cmap=cmap)
+    nmap.save('%s_%s.png' % (ifile, prod), dpi=dpi)

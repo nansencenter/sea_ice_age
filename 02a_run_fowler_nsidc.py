@@ -54,7 +54,8 @@ for factor in factors:
         propagate_fowler(i_start, i_end, nsidc_sid_files, reader, get_date, src_res, h, factor, odir=odir)
         vis_ice_npz(odir + 'icemap_%04d' % yy)
 
-#save_max_age('/files/sea_ice_age/fowler_nsidc_1985_f02/', 1)
-#save_max_age('/files/sea_ice_age/fowler_nsidc_1985_f04/', 2)
-#save_max_age('/files/sea_ice_age/fowler_nsidc_1985_f08/', 4)
+save_max_age('/files/sea_ice_age/fowler_nsidc_1985_f02/', 1)
+save_max_age('/files/sea_ice_age/fowler_nsidc_1985_f04/', 2)
+save_max_age('/files/sea_ice_age/fowler_nsidc_1985_f08/', 4)
 save_max_age('/files/sea_ice_age/fowler_nsidc_2016_f02/', 1)
+
