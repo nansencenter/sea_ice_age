@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 from nansat import *
 from iceagelib import *
 
-#### IMPLEMENT and RUN THE NSIDC PROPAGATION
+#### RUN THE NSIDC PROPAGATION
 
 #ftp://osisaf.met.no/archive_test/ice/drift_lr/osi405c_demo_archive/2013/01/ice_drift_nh_polstere-625_multi-oi_201301191200-201301211200.nc
 #wget -w 1 -r -nc -nd -A 'ice_drift_nh_*.nc' -P /Data/sat/downloads/osi405c_demo_archive/ ftp://osisaf.met.no/archive_test/ice/drift_lr/osi405c_demo_archive/2016
@@ -22,23 +22,23 @@ h = 7 * 24 * 60 * 60 # temoral resolution (sec)
 
 nsidc_sid_files = sorted(glob.glob(nsidc_sid_dir + 'icemotion.grid.week*.bin'))
 
+## TEST
+#factor = 2
+#i_start = get_nsidc_i_of_file(1978, 44, nsidc_sid_files)
+#i_end = get_nsidc_i_of_file(1979, 10, nsidc_sid_files)
+#propagate_fowler(i_start, i_end, nsidc_sid_files, reader, get_date, src_res, h, factor, odir=odir)
+#vis_ice_npz(odir + 'icemap_1978')
+
 ## 1979 - 1984
 factors = [2, 4, 8]
 odirmsk = 'fowler_nsidc_1985_f%02d/'
-
 years = [1978, 1979, 1980, 1981, 1982, 1983, 1984]
 weeks = [44, 35, 35, 35, 35, 35, 35]
 i_end = get_nsidc_i_of_file(1984, 52, nsidc_sid_files)
 
-## TEST
-#years = [1978]
-#weeks = [44]
-#i_end = get_nsidc_i_of_file(1979, 10, nsidc_sid_files)
-
 ## 2012 - 2015
 factors = [2]
 odirmsk = 'fowler_nsidc_2016_f%02d/'
-
 years = [2012, 2013, 2014, 2015]
 weeks = [35,   35,   35,   35]
 i_end = get_nsidc_i_of_file(2015, 52, nsidc_sid_files)

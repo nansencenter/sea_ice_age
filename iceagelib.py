@@ -53,7 +53,7 @@ def zoom_nan(img, factor, order=1, sigma=0):
     
     return imgz
     
-def get_nsidc_uv(ifile, src_res, h, factor=1, order=1, sigma=0):
+def get_nsidc_uv(ifile, src_res, h, factor=1, order=1, sigma=0, **kwargs):
     ''' Load U,V and ice mask from NSIDC file
     Return U,V in row/col pixels
     '''
@@ -241,28 +241,26 @@ def get_icemap_dates(icemap_file):
     d1 = parse(nameparts[-1])
     return d0, d1
 
-def propagate_from_newprop(i0, ifiles, reader=get_nsidc_uv, get_date=get_nsidc_date,
-                           res=25000, factor=1, order=1, sigma=0,
-                           h=60*60*24*7, repro=None, odir='./', conc=False,
-                           min_flux=0,
-                           **kwargs):
+def propagate_nersc(i_start, i_end, ifiles, reader, get_date, src_res, h,
+                    odir='./', conc=False, min_flux=0, **kwargs):
     ''' Apply NERSC algorithm for ice age 
     Input:
-        i0, index of file to start from
+        i_start, index of file to start from
+        i_end, index of the last file
         ifiles: list of files with U,V,C
         reader: function to read U,V,C from input file
         get_date: function to read date from input file
-        res: spatial resolution (m)
+        src_res: spatial resolution (m)
         factor: zoom factor
         h: time step (sec)
-        repro: tuple with Domains for ice reprojection
         odir: output directory
     Output:
         None. Files with sea ice age.
     '''
     # get initial ice mask and drift
-    u0, v0, c0 = reader(ifiles[i0], factor=factor, order=order, sigma=sigma, **kwargs)
-    d0 = get_date(ifiles[i0])
+    u0, v0, c0 = reader(ifiles[i_start], src_res, h, **kwargs)
+    #import ipdb; ipdb.set_trace()
+    d0 = get_date(ifiles[i_start])
     
     # find files with ice age produced from previous years
     ice0files = sorted(glob.glob(odir + '*%s.npz' % d0.strftime('%Y-%m-%d')))
@@ -271,8 +269,8 @@ def propagate_from_newprop(i0, ifiles, reader=get_nsidc_uv, get_date=get_nsidc_d
     if conc:
         ice0 = c0 / 100.
     else:
-        ice0 = np.zeros(c0.shape)  # water is zero age old
-        ice0[c0 > 0] = 1 # on 1 october all ice is 1 year old
+        ice0 = np.zeros(c0.shape) # water is zero years old
+        ice0[c0 > 0] = 1 # on 15 September all ice is 1 year old
     
     # reduce initial concentration by concentrations of older ice
     for ice0file in ice0files:
@@ -296,7 +294,7 @@ def propagate_from_newprop(i0, ifiles, reader=get_nsidc_uv, get_date=get_nsidc_d
     cols0, rows0 = np.meshgrid(range(u0.shape[1]), range(u0.shape[0]))
     k = 0
     # loop over files with ice drift
-    for i in range(i0, len(ifiles)-1):
+    for i in range(i_start, i_end-1):
         d1 = get_date(ifiles[i+1])
         ofile = '%s/icemap_%s_%s.npz' % (odir,
                             d0.strftime('%Y-%m-%d'),
@@ -306,14 +304,14 @@ def propagate_from_newprop(i0, ifiles, reader=get_nsidc_uv, get_date=get_nsidc_d
             ice0 = np.load(ofile)['ice']
             continue
             
-        print os.path.basename(ifiles[i0]), os.path.basename(ifiles[i])
+        print os.path.basename(ifiles[i_start]), os.path.basename(ifiles[i])
         # read U,V,C,T
-        u, v, c = reader(ifiles[i], factor=factor, order=order, sigma=sigma, **kwargs)
+        dc, dr, c = reader(ifiles[i], src_res, h, **kwargs)
         d = get_date(ifiles[i])
 
         # increment of coordinates
-        dc = u * h / res
-        dr = - v * h / res
+        #dc = u * h / res
+        #dr = - v * h / res
 
         # allow only substantial enough increment
         #dc[np.abs(dc) < min_incr] = min_incr * np.sign(dc[np.abs(dc) < min_incr])
@@ -355,8 +353,6 @@ def propagate_from_newprop(i0, ifiles, reader=get_nsidc_uv, get_date=get_nsidc_d
         #for ice1flux in [ice1aa, ice1ab, ice1ba, ice1bb]:
         #    ice1flux[ice1flux < min_flux] = 0
 
-        #import ipdb; ipdb.set_trace()
-
         # find valid donor pixels
         gpi = np.isfinite(cols1) * np.isfinite(rows1)
         ice1 = np.zeros_like(ice0)
@@ -387,10 +383,8 @@ def propagate_from_newprop(i0, ifiles, reader=get_nsidc_uv, get_date=get_nsidc_d
         bincount = np.bincount(idx, w)
         ice1.flat[:bincount.size] += bincount
         
-       
         # ice1: sum of fluxes for a given date
         # it should be corrected by older ice
-
         print 'Sum older: ', 
         # sum of fractions of older ice 
         sum_prev_ice1 = np.zeros_like(ice1)
@@ -413,7 +407,7 @@ def propagate_from_newprop(i0, ifiles, reader=get_nsidc_uv, get_date=get_nsidc_d
         max_ice_increment = ice_conc - sum_prev_ice1
         # limit increment by the maximum possible
         ice1[ice1 > max_ice_increment] = max_ice_increment[ice1 > max_ice_increment]
-
+        
         ice0 = ice1
         np.savez_compressed(ofile, ice=ice0)
 
