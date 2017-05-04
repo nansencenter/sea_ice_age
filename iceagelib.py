@@ -447,7 +447,7 @@ def vis_drift_npz(idir, odir):
 
 def get_mean_age(idir, thedate, ice_mask):
     ''' Compute weighted average of fractional ice age '''
-    rfiles = sorted(glob.glob(idir + '*%s.npz' % thedate.strftime('%y-%m-%d')), reverse=True)
+    rfiles = sorted(glob.glob(idir + '*%s.npz' % thedate.strftime('%Y-%m-%d')), reverse=True)
     age0 = np.load(rfiles[0])['ice']
     ice_age_sum = np.zeros(age0.shape)
     ice_age_wsum = np.zeros(age0.shape)
@@ -478,7 +478,9 @@ def get_mean_age(idir, thedate, ice_mask):
     ice_age_mean[ice_mask == 0] = 0
     ice_age_mean[np.isnan(ice_mask)] = np.nan
     
-    return ice_age_weights, ice_age_mean
+    myi = np.sum(ice_age_weights[1:], axis=0)
+    
+    return ice_age_weights, ice_age_mean, myi
 
 def save_max_age(idir, sia_factor, vmin=0, vmax=8):
     ''' Use Fowler method to compute SIA (max age in bin) '''
@@ -522,6 +524,23 @@ def save_max_age(idir, sia_factor, vmin=0, vmax=8):
         plt.imsave('%s/sia_%05d.png' % (odir, k), sia, cmap='jet', vmin=vmin, vmax=vmax)
         k += 1
 
+def save_mean_age(sid_files, icemap_dir, reader, get_date, vmin=0, vmax=5, **kwargs):
+    ''' Use NERSC method to compute SIA and ice fractions '''
+    odir = icemap_dir + 'sia/'
+    if not os.path.exists(odir):
+        os.makedirs(odir)
+
+    k = 0
+    for sid_file in sid_files:
+        u,v,c = reader(sid_file, **kwargs)
+        d = get_date(sid_file)
+        print d
+        sif, sia, myi = get_mean_age(icemap_dir, d, c)
+        ofile = '%s/%s_sia.npz' % (odir, d.strftime('%Y-%m-%d'))
+        np.savez_compressed(ofile, sia=sia, sif=sif, myi=myi)
+        plt.imsave('%s/sia_%05d.png' % (odir, k), sia, cmap='jet', vmin=vmin, vmax=vmax)
+        k += 1
+                    
 def make_map(ifile, prod, src_dom, dst_dom, vmin=0, vmax=5, dpi=250, cmap='jet'):
     ''' Make map with a product '''
     sia = np.load(ifile)[prod]
