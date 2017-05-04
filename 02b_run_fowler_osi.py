@@ -40,5 +40,3 @@ for yy, mm, dd in zip(years, months, days):
     i_start = get_osi_i_of_file(yy, mm, dd, osi_sid_files)
     propagate_fowler(i_start, i_end, osi_sid_files, reader, get_date, src_res, h, factor, odir=odir)
     vis_ice_npz(odir + 'icemap_%04d' % yy)
-
-save_max_age('/files/sea_ice_age/fowler_osi_fv1/', 1)

@@ -13,6 +13,11 @@ dst_nsr = NSR('+proj=stere +datum=WGS84 +ellps=WGS84 +lat_0=90 +lon_0=0  +lat_ts
 dst_dom = Domain(dst_nsr, '-te -2000000 -2400000 2000000 2600000 -tr 10000 10000')
 
 ## FOWLER NSIDC
+save_max_age('/files/sea_ice_age/fowler_nsidc_1985_f02/', 1)
+save_max_age('/files/sea_ice_age/fowler_nsidc_1985_f04/', 2)
+save_max_age('/files/sea_ice_age/fowler_nsidc_1985_f08/', 4)
+save_max_age('/files/sea_ice_age/fowler_nsidc_2016_f02/', 1)
+
 # source domain
 nsidc_nsr = NSR('+proj=laea +datum=WGS84 +ellps=WGS84 +lat_0=90 +lon_0=0 +no_defs')
 nsidc_sia_dom = Domain(nsidc_nsr, '-te -4512500 -4512500 4512500 4512500 -tr 12500 12500')
@@ -24,6 +29,8 @@ ifiles = sorted(glob.glob(idir + '2015-12*.npz'))
 [make_map(ifile, prod, nsidc_sia_dom, dst_dom) for ifile in ifiles]
 
 ## FOWLER OSI
+save_max_age('/files/sea_ice_age/fowler_osi_fv1/', 1)
+
 # source domain
 osi_nsr = NSR('+proj=stere +a=6378273 +b=6356889.44891 +lat_0=90 +lat_ts=70 +lon_0=-45')
 osi_sic_dom = Domain(osi_nsr, '-te -3850000 -5350000 3750000 5850000 -tr 10000 10000')
