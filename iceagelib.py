@@ -53,7 +53,7 @@ def zoom_nan(img, factor, order=1, sigma=0):
     
     return imgz
     
-def get_nsidc_uv(ifile, src_res, h, factor=1, order=1, sigma=0, **kwargs):
+def get_nsidc_uv(ifile, src_res=25000, h=7*24*60*60, factor=1, order=1, sigma=0, **kwargs):
     ''' Load U,V and ice mask from NSIDC file
     Return U,V in row/col pixels
     '''
@@ -155,7 +155,7 @@ def fill_osi_uv(u, v, c, sid_dom, sic_dom, nn_dst=5, sigma=2, **kwargs):
 
     return uv_pro[0], uv_pro[1], c
 
-def get_osi_uvc_filled(sid_file, src_res=10000, h=24*60*60, factor=1):
+def get_osi_uvc_filled(sid_file, src_res=10000, h=24*60*60, factor=1, **kwargs):
     ''' Load presaved SID and SIC '''
     data = np.load(sid_file)
     u, v, c = data['u'], data['v'], data['c']
@@ -174,8 +174,8 @@ def reproject_ice(d0, d1, ice0, eResampleAlg=0):
     n.reproject(d1, addmask=False, eResampleAlg=eResampleAlg, blockSize=10)
     return n[1]
 
-def propagate_fowler(i_start, i_end, ifiles, reader, get_date, src_res, h, factor,
-                   odir='./', savexy=False, **kwargs):
+def propagate_fowler(i_start, i_end, ifiles, reader, get_date, odir,
+                     savexy=False, **kwargs):
     ''' Apply NSIDC algorithm for ice age 
     Input:
         i0, index of file to start from
@@ -191,7 +191,7 @@ def propagate_fowler(i_start, i_end, ifiles, reader, get_date, src_res, h, facto
     '''
     rnd = lambda x: np.round(x).astype(int)
     # read initial conditions
-    u, v, c = reader(ifiles[i_start], src_res, h, factor, **kwargs)
+    u, v, c = reader(ifiles[i_start], **kwargs)
     d0 = get_date(ifiles[i_start])
 
     # save initiation day YYYY.WW-YYYY.WW
@@ -223,7 +223,7 @@ def propagate_fowler(i_start, i_end, ifiles, reader, get_date, src_res, h, facto
                (rows < u.shape[0]))
 
         ice = np.zeros(u.shape) + np.nan
-        u, v, c = reader(ifile, src_res, h, factor, **kwargs)
+        u, v, c = reader(ifile, **kwargs)
         d = get_date(ifile)
         ice[c > 0] = 0        
         ice[rnd(rows[gpi]), rnd(cols[gpi])] = 1
@@ -241,8 +241,8 @@ def get_icemap_dates(icemap_file):
     d1 = parse(nameparts[-1])
     return d0, d1
 
-def propagate_nersc(i_start, i_end, ifiles, reader, get_date, src_res, h,
-                    odir='./', conc=False, min_flux=0, **kwargs):
+def propagate_nersc(i_start, i_end, ifiles, reader, get_date, odir, 
+                    conc=False, min_flux=0, **kwargs):
     ''' Apply NERSC algorithm for ice age 
     Input:
         i_start, index of file to start from
@@ -258,7 +258,7 @@ def propagate_nersc(i_start, i_end, ifiles, reader, get_date, src_res, h,
         None. Files with sea ice age.
     '''
     # get initial ice mask and drift
-    u0, v0, c0 = reader(ifiles[i_start], src_res, h, **kwargs)
+    u0, v0, c0 = reader(ifiles[i_start], **kwargs)
     #import ipdb; ipdb.set_trace()
     d0 = get_date(ifiles[i_start])
     
@@ -294,7 +294,7 @@ def propagate_nersc(i_start, i_end, ifiles, reader, get_date, src_res, h,
     cols0, rows0 = np.meshgrid(range(u0.shape[1]), range(u0.shape[0]))
     k = 0
     # loop over files with ice drift
-    for i in range(i_start, i_end-1):
+    for i in range(i_start, i_end):
         d1 = get_date(ifiles[i+1])
         ofile = '%s/icemap_%s_%s.npz' % (odir,
                             d0.strftime('%Y-%m-%d'),
@@ -306,7 +306,7 @@ def propagate_nersc(i_start, i_end, ifiles, reader, get_date, src_res, h,
             
         print os.path.basename(ifiles[i_start]), os.path.basename(ifiles[i])
         # read U,V,C,T
-        dc, dr, c = reader(ifiles[i], src_res, h, **kwargs)
+        dc, dr, c = reader(ifiles[i], **kwargs)
         d = get_date(ifiles[i])
 
         # increment of coordinates
@@ -445,7 +445,7 @@ def vis_drift_npz(idir, odir):
         plt.close()
         k += 1
 
-def get_mean_age(idir, thedate):
+def get_mean_age(idir, thedate, ice_mask):
     ''' Compute weighted average of fractional ice age '''
     rfiles = sorted(glob.glob(idir + '*%s.npz' % thedate.strftime('%y-%m-%d')), reverse=True)
     age0 = np.load(rfiles[0])['ice']
@@ -467,10 +467,6 @@ def get_mean_age(idir, thedate):
     # add one year ice and water/landmask from nsidc_age
     ice_age_mean[np.isnan(ice_age_mean)] = 1
     
-    return ice_age_weights, ice_age_mean
-
-def add_fyi(ice_age_weights, ice_age_mean, ice_mask):
-    ''' Compute weight of FYI based on ice mask and MYI fractions '''
     myi_weight = ice_age_weights.sum(axis=0)
     fyi_weight = 1 - myi_weight
     fyi_weight[ice_mask == 0] = 0

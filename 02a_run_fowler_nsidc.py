@@ -14,20 +14,18 @@ from iceagelib import *
 
 ### NSIDC U/V
 nsidc_sid_dir = '/files/nsidc0116_icemotion_vectors_v3/'
-
 reader = get_nsidc_uv
 get_date = get_nsidc_date
-src_res = 25000 # spatial resolution of the source datasets (m)
-h = 7 * 24 * 60 * 60 # temoral resolution (sec)
-
 nsidc_sid_files = sorted(glob.glob(nsidc_sid_dir + 'icemotion.grid.week*.bin'))
 
 ## TEST
 #factor = 2
+#odir = './'
 #i_start = get_nsidc_i_of_file(1978, 44, nsidc_sid_files)
 #i_end = get_nsidc_i_of_file(1979, 10, nsidc_sid_files)
-#propagate_fowler(i_start, i_end, nsidc_sid_files, reader, get_date, src_res, h, factor, odir=odir)
+#propagate_fowler(i_start, i_end, nsidc_sid_files, reader, get_date, odir, factor=factor)
 #vis_ice_npz(odir + 'icemap_1978')
+#raise
 
 ## 1979 - 1984
 factors = [2, 4, 8]
@@ -51,5 +49,5 @@ for factor in factors:
     # for all start years
     for yy, ww in zip(years, weeks):
         i_start = get_nsidc_i_of_file(yy, ww, nsidc_sid_files)
-        propagate_fowler(i_start, i_end, nsidc_sid_files, reader, get_date, src_res, h, factor, odir=odir)
+        propagate_fowler(i_start, i_end, nsidc_sid_files, reader, get_date, odir, factor=factor)
         vis_ice_npz(odir + 'icemap_%04d' % yy)

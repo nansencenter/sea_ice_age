@@ -21,12 +21,10 @@ factor = 1
 osi_sid_files = sorted(glob.glob(osi_sid_dir + '*.npz'))
 
 ## TEST
-#odir = '/files/sea_ice_age/nersc_osi_fv1_test/'
-#if not os.path.exists(odir):
-#    os.makedirs(odir)
+#odir = './'
 #i_start = get_osi_i_of_file(2012, 10, 1, osi_sid_files)
 #i_end = get_osi_i_of_file(2012, 12, 31, osi_sid_files)
-#propagate_nersc(i_start, i_end, osi_sid_files, reader, get_date, src_res, h, odir=odir)
+#propagate_nersc(i_start, i_end, osi_sid_files, reader, get_date, odir)
 #vis_ice_npz(odir + 'icemap_2012')
 #raise
 
@@ -42,6 +40,6 @@ if not os.path.exists(odir):
     
 for yy, mm, dd in zip(years, months, days):
     i_start = get_osi_i_of_file(yy, mm, dd, osi_sid_files)
-    propagate_nersc(i_start, i_end, osi_sid_files, reader, get_date, src_res, h, odir=odir)
+    propagate_nersc(i_start, i_end, osi_sid_files, reader, get_date, odir)
     vis_ice_npz(odir + 'icemap_%04d' % yy)
 
