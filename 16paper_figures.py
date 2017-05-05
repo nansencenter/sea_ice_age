@@ -19,20 +19,8 @@ montage\
  /files/sea_ice_age/fowler_nsidc_1985_f08/sia/1984-12-30_sia.npz_sia.png\
  -tile 3x1 -geometry +0+0 figure_02_sia_compar_density.png 
 """
+save_legend(cm.thermal_r, np.linspace(1,9,9), 'Sea Ice Age, years', 'figure_02_sia_legend.png')
 
-# colorbar for SIA
-cmap = cm.thermal_r
-cmaplist = [cmap(i) for i in range(cmap.N)]
-cmap = cmap.from_list('Custom cmap', cmaplist, cmap.N)
-bounds = np.linspace(1,9,9)
-norm = mpl.colors.BoundaryNorm(bounds, cmap.N)
-
-fig = plt.figure(figsize=(8, 1))
-ax2 = fig.add_axes([0.05, 0.5, 0.9, 0.3])
-cb = mpl.colorbar.ColorbarBase(ax2, cmap=cmap, norm=norm, spacing='proportional', ticks=bounds, boundaries=bounds, format='%1i', orientation='horizontal')
-cb.set_label('Sea Ice Age, years', size=12)
-plt.savefig('figure_02_sia_legend.png', dpi=150, bbox_inches='tight', pad_inches=0)
-plt.close()
 
 ## FIGURE 3. SIA density historgrams
 factors = [2,4,8]
@@ -54,8 +42,151 @@ plt.savefig('figure_03_sia_dens_histo.png', dpi=150, bbox_inches='tight', pad_in
 plt.close()
 raise
 
-## FIGURE 4. Components of FOWLER/NSIDC
 
+
+
+
+
+
+## FIGURE 4. Components of FOWLER/NSIDC
+# source domain
+nsidc_nsr = NSR('+proj=laea +datum=WGS84 +ellps=WGS84 +lat_0=90 +lon_0=0 +no_defs')
+nsidc_sia_dom = Domain(nsidc_nsr, '-te -4512500 -4512500 4512500 4512500 -tr 12500 12500')
+# destination domain
+dst_nsr = NSR('+proj=stere +datum=WGS84 +ellps=WGS84 +lat_0=90 +lon_0=0  +lat_ts=70 +no_defs')
+dst_dom = Domain(dst_nsr, '-te -700000 -1400000 700000 1600000 -tr 10000 10000')
+
+idir = '/files/sea_ice_age/fowler_nsidc_1985_f08/'
+rfiles = sorted(glob.glob(idir + '*1984-12-30.npz'), reverse=True)
+age_sums = []
+for rfile in rfiles:
+    age = np.load(rfile)['ice']
+    age_sum = np.nansum(np.stack([age[0::4, 0::4],
+                                  age[1::4, 1::4],
+                                  age[2::4, 2::4],
+                                  age[3::4, 3::4]]), axis=0)
+    age_sums.append(age_sum)
+age_sums = np.array(age_sums)
+age_sum_tot = np.nansum(age_sums, axis=0)
+for i, age_sum in enumerate(age_sums):
+    age_frac = age_sum/age_sum_tot
+    age_frac[~np.isfinite(age_frac)] = 0
+    make_map('tmp_fraction_1984-12-30_%02d.npz' % i, 'age_frac', nsidc_sia_dom, dst_dom,
+          vmin=0, vmax=0.8, cmap=cm.ice, title='%dYI' % (i+2), array=age_frac)
+
+"""
+!montage\
+   tmp_fraction_1984-12-30_??.npz_age_frac.png\
+   -tile 7x1 -geometry +0+0 figure_04_fowler_ice_frac.png 
+"""
+save_legend(cm.ice, np.linspace(0,80,20), 'Sea Ice Age Fraction, %', 'figure_04_sif_legend.png')
+
+
+#### FIGURE 5. AVERAGE SIC 
+idir_uv = '/files/sea_ice_age/osi405c_demo_archive_filled_v1/'
+ice_avg = []
+ice_std = []
+ice_p16 = []
+ice_p85 = []
+
+mms = range(1, 13)
+for mm in mms:
+    print mm
+    ifiles = sorted(glob.glob(idir_uv + 'ice_drift_nh_polstere-625_multi-oi_????%02d*' % mm))
+    print len(ifiles)
+    ice = np.array([np.load(ifile)['c'] for ifile in ifiles])
+    ice[ice < 15] = np.nan
+
+    ice_avg.append(np.nanmean(ice))
+    ice_std.append(np.nanstd(ice))
+    ice_p16.append(np.nanpercentile(ice, 16))
+    ice_p85.append(np.nanpercentile(ice, 86))
+
+ice_avg = np.array(ice_avg)
+ice_std = np.array(ice_std)
+ice_p16 = np.array(ice_p16)
+ice_p85 = np.array(ice_p85)
+
+mpl.rcParams['xtick.labelsize'] = 14 
+plt.fill_between(mms, ice_p16, ice_p85, alpha=0.5, color='gray')
+plt.plot(mms, ice_avg, 'k.-')
+plt.xlabel('month', fontsize=14)
+plt.ylabel('average concentration, %', fontsize=14)
+plt.savefig('figure_05_monthly_sic_aver.png')
+plt.close()
+
+
+### =====================
+#####  FIGURE 7. Propagation and weighted average
+# destination domain
+dst_nsr = NSR('+proj=stere +datum=WGS84 +ellps=WGS84 +lat_0=90 +lon_0=0  +lat_ts=70 +no_defs')
+dst_dom = Domain(dst_nsr, '-te -2000000 -2400000 2000000 2600000 -tr 10000 10000')
+osi_nsr = NSR('+proj=stere +a=6378273 +b=6356889.44891 +lat_0=90 +lat_ts=70 +lon_0=-45')
+osi_sic_dom = Domain(osi_nsr, '-te -3850000 -5350000 3750000 5850000 -tr 10000 10000')
+
+c = np.load('/files/sea_ice_age/osi405c_demo_archive_filled_v1/ice_drift_nh_polstere-625_multi-oi_201210011200-201210031200.nc.npz')['c']
+make_map('tmp_2012-10-01', 'sic', osi_sic_dom, dst_dom,
+          vmin=0, vmax=100, cmap=cm.ice, title='2012-10-01', array=c, text='A: $C_{OBS}$')
+make_map('tmp_2012-10-01', '2yi', osi_sic_dom, dst_dom,
+          vmin=0, vmax=100, cmap=cm.ice, array=c, text='D: $C_{2YI}$')
+make_map('tmp_2012-10-01', '1yi', osi_sic_dom, dst_dom,
+          vmin=100, vmax=200, cmap=cm.ice, array=c, text='G: $C_{FYI}$')
+
+c = np.load('/files/sea_ice_age/osi405c_demo_archive_filled_v1/ice_drift_nh_polstere-625_multi-oi_201303291200-201303311200.nc.npz')['c']
+make_map('tmp_2013-04-01', 'sic', osi_sic_dom, dst_dom,
+          vmin=0, vmax=100, cmap=cm.ice, title='2013-04-01', array=c, text='B: $C_{OBS}$')
+
+c = np.load('/files/sea_ice_age/osi405c_demo_archive_filled_v1/ice_drift_nh_polstere-625_multi-oi_201309151200-201309171200.nc.npz')['c']
+make_map('tmp_2013-09-15', 'sic', osi_sic_dom, dst_dom,
+          vmin=0, vmax=100, cmap=cm.ice, title='2013-09-15', array=c, text='C: $C_{OBS}$')
+
+sif = np.load('/files/sea_ice_age/nersc_osi_fv1_2017_conc/sia/2013-03-29_sia.npz')['sif']
+make_map('tmp_2013-04-01',
+         '1yi', osi_sic_dom, dst_dom,
+          vmin=0, vmax=1, cmap=cm.ice, array=sif[0], text='H: $C_{FYI}$')
+make_map('tmp_2013-04-01',
+         '2yi', osi_sic_dom, dst_dom,
+          vmin=0, vmax=1, cmap=cm.ice, array=sif[1], text='E: $C_{2YI}$')
+
+sif = np.load('/files/sea_ice_age/nersc_osi_fv1_2017_conc/sia/2013-09-17_sia.npz')['sif']
+make_map('tmp_2013-09-15',
+         '2yi', osi_sic_dom, dst_dom,
+          vmin=0, vmax=1, cmap=cm.ice, array=sif[1], text='I: $C_{2YI}$')
+make_map('tmp_2013-09-15',
+         '3yi', osi_sic_dom, dst_dom,
+          vmin=0, vmax=1, cmap=cm.ice, array=sif[2], text='F: $C_{3YI}$')
+
+"""
+!montage\
+    tmp_2012-10-01_sic.png tmp_2013-04-01_sic.png tmp_2013-09-15_sic.png\
+    tmp_2012-10-01_2yi.png tmp_2013-04-01_2yi.png tmp_2013-09-15_3yi.png\
+    tmp_2012-10-01_1yi.png tmp_2013-04-01_1yi.png tmp_2013-09-15_2yi.png\
+   -tile 3x3 -geometry +0+0 figure_07_weighted_sif.png 
+"""
+save_legend(cm.ice, np.linspace(0,100,20), 'Sea Ice Age Fraction, %', 'figure_07_sif_legend.png')
+
+
+make_map('/files/sea_ice_age/nersc_osi_fv1_2017_conc/sia/2012-10-01_sia.npz',
+         'sia', osi_sic_dom, dst_dom,
+         vmin=0, vmax=3, cmap=cm.thermal, text='J: $SIA$')
+
+make_map('/files/sea_ice_age/nersc_osi_fv1_2017_conc/sia/2013-03-29_sia.npz',
+         'sia', osi_sic_dom, dst_dom,
+         vmin=0, vmax=3, cmap=cm.thermal, text='K: $SIA$')
+
+make_map('/files/sea_ice_age/nersc_osi_fv1_2017_conc/sia/2013-09-15_sia.npz',
+         'sia', osi_sic_dom, dst_dom,
+         vmin=0, vmax=3, cmap=cm.thermal, text='L: $SIA$')
+
+"""
+!montage\
+    /files/sea_ice_age/nersc_osi_fv1_2017_conc/sia/2012-10-01_sia.npz_sia.png\
+    /files/sea_ice_age/nersc_osi_fv1_2017_conc/sia/2013-03-29_sia.npz_sia.png\
+    /files/sea_ice_age/nersc_osi_fv1_2017_conc/sia/2013-09-15_sia.npz_sia.png\
+   -tile 3x1 -geometry +0+0 figure_07_weighted_sia.png     
+"""
+
+save_legend(cm.thermal, np.linspace(0.,3.,13.), 'Sea Ice Age, years', 'figure_07_sia_legend.png', format='%2.1f')
 
 ## FIGURE 8. COMPARISON OF SIA with different methods
 """

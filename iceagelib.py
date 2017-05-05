@@ -4,7 +4,9 @@ import datetime as dt
 from dateutil.parser import parse
 
 import numpy as np
+import matplotlib as mpl
 import matplotlib.pyplot as plt
+
 from netCDF4 import Dataset
 import pygrib
 
@@ -541,10 +543,34 @@ def save_mean_age(sid_files, icemap_dir, reader, get_date, vmin=0, vmax=5, **kwa
         plt.imsave('%s/sia_%05d.png' % (odir, k), sia, cmap='jet', vmin=vmin, vmax=vmax)
         k += 1
                     
-def make_map(ifile, prod, src_dom, dst_dom, vmin=0, vmax=5, dpi=250, cmap='jet'):
+def make_map(ifile, prod, src_dom, dst_dom, array=None,
+             vmin=0, vmax=5, dpi=250, cmap='jet',
+             title=None, text=None, textx=100000, texty=5000000, fontsize=18):
     ''' Make map with a product '''
-    sia = np.load(ifile)[prod]
+    if array is None:
+        sia = np.load(ifile)[prod]
+    else:
+        sia = array
     sia_pro = reproject_ice(src_dom, dst_dom, sia)
     nmap = Nansatmap(dst_dom, resolution='l')
     nmap.imshow(sia_pro, vmin=vmin, vmax=vmax, cmap=cmap)
+    if title is not None:
+        plt.title(title, fontsize=fontsize)
+    if text is not None:
+        plt.text(textx, texty, text, fontsize=fontsize, va='top', bbox=dict(facecolor='white', alpha=0.9))
     nmap.save('%s_%s.png' % (ifile, prod), dpi=dpi)
+
+def save_legend(cmap, bounds, label, filename, format='%1i'):
+    # colorbar for SIA
+    cmap = plt.get_cmap(cmap)
+    cmaplist = [cmap(i) for i in range(cmap.N)]
+    cmap = cmap.from_list('Custom cmap', cmaplist, cmap.N)
+    norm = mpl.colors.BoundaryNorm(bounds, cmap.N)
+    fig = plt.figure(figsize=(8, 1))
+    ax2 = fig.add_axes([0.05, 0.5, 0.9, 0.3])
+    cb = mpl.colorbar.ColorbarBase(ax2,
+        cmap=cmap, norm=norm, spacing='proportional', ticks=bounds,
+        boundaries=bounds, format=format, orientation='horizontal')
+    cb.set_label(label, size=12)
+    plt.savefig(filename, dpi=150, bbox_inches='tight', pad_inches=0)
+    plt.close()

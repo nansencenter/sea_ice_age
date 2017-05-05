@@ -28,7 +28,7 @@ nsidc_sid_files = sorted(glob.glob(nsidc_sid_dir + 'icemotion.grid.week*.bin'))
 #raise
 
 ## 1979 - 1984
-odir = '/files/sea_ice_age/fowler_nsidc_1985/'
+odir = '/files/sea_ice_age/nersc_nsidc_1985/'
 years = [1978, 1979, 1980, 1981, 1982, 1983, 1984]
 weeks = [44, 35, 35, 35, 35, 35, 35]
 i_end = get_nsidc_i_of_file(1984, 52, nsidc_sid_files)
