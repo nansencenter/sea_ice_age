@@ -574,3 +574,10 @@ def save_legend(cmap, bounds, label, filename, format='%1i'):
     cb.set_label(label, size=12)
     plt.savefig(filename, dpi=150, bbox_inches='tight', pad_inches=0)
     plt.close()
+
+def get_nsidc_raw_sia(ifile):
+    nsidc_age = np.fromfile(ifile, np.uint8).reshape(361*2,361*2).astype(np.float32)
+    nsidc_age[nsidc_age==255] = np.nan
+    nsidc_age /= 5.
+
+    return nsidc_age

@@ -55,9 +55,21 @@ osi_sic_dom = Domain(osi_nsr, '-te -3850000 -5350000 3750000 5850000 -tr 10000 1
 # save mean age
 osi_sid_files = sorted(glob.glob(osi_sid_dir + '*_2012100*.npz'))
 save_mean_age(osi_sid_files, osi_sia_dir, reader, get_date)
+osi_sid_files = sorted(glob.glob(osi_sid_dir + '*_201212*.npz'))
+save_mean_age(osi_sid_files, osi_sia_dir, reader, get_date)
 osi_sid_files = sorted(glob.glob(osi_sid_dir + '*_2013032*.npz'))
 save_mean_age(osi_sid_files, osi_sia_dir, reader, get_date)
 osi_sid_files = sorted(glob.glob(osi_sid_dir + '*_2013091*.npz'))
+save_mean_age(osi_sid_files, osi_sia_dir, reader, get_date)
+osi_sid_files = sorted(glob.glob(osi_sid_dir + '*_201312*.npz'))
+save_mean_age(osi_sid_files, osi_sia_dir, reader, get_date)
+osi_sid_files = sorted(glob.glob(osi_sid_dir + '*_201412*.npz'))
+save_mean_age(osi_sid_files, osi_sia_dir, reader, get_date)
+osi_sid_files = sorted(glob.glob(osi_sid_dir + '*_201512*.npz'))
+save_mean_age(osi_sid_files, osi_sia_dir, reader, get_date)
+osi_sid_files = sorted(glob.glob(osi_sid_dir + '*_201612*.npz'))
+save_mean_age(osi_sid_files, osi_sia_dir, reader, get_date)
+osi_sid_files = sorted(glob.glob(osi_sid_dir + '*_201703*.npz'))
 save_mean_age(osi_sid_files, osi_sia_dir, reader, get_date)
 
 for yy in [2013, 2014, 2015, 2016, 2017]:

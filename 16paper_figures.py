@@ -44,10 +44,6 @@ raise
 
 
 
-
-
-
-
 ## FIGURE 4. Components of FOWLER/NSIDC
 # source domain
 nsidc_nsr = NSR('+proj=laea +datum=WGS84 +ellps=WGS84 +lat_0=90 +lon_0=0 +no_defs')
@@ -198,9 +194,59 @@ montage\
  -tile 2x2 -geometry +0+0 figure_08_sia_compar_methods.png 
 """
 
+save_legend('jet', np.linspace(0.,5.,13.), 'Sea Ice Age, years', 'figure_08_sia_legend.png', format='%2.1f')
 
 
+### FIGURE 9. Comparison of MYI
+# source domain
+nsidc_nsr = NSR('+proj=laea +datum=WGS84 +ellps=WGS84 +lat_0=90 +lon_0=0 +no_defs')
+nsidc_sia_dom = Domain(nsidc_nsr, '-te -4512500 -4512500 4512500 4512500 -tr 12500 12500')
+# destination domain
+dst_nsr = NSR('+proj=stere +datum=WGS84 +ellps=WGS84 +lat_0=90 +lon_0=0  +lat_ts=70 +no_defs')
+dst_dom = Domain(dst_nsr, '-te -2000000 -2400000 2000000 2600000 -tr 10000 10000')
+for yy in [2012, 2013, 2014, 2015]:
+    sia = get_nsidc_raw_sia('/files/nsidc0611_seaice_age_v3/iceage.grid.week.%d.52.n.v3.bin' % yy)
+    myi = (sia > 1).astype(float)
+    make_map('tmp_%d-12-31' % yy, 'nsidc_myi', nsidc_sia_dom, dst_dom,
+             array=myi, vmin=0, vmax=1, cmap=cm.ice, text='MYI NSIDC', title='%d-12-31' % yy)
 
+make_map('tmp_2016-12-31', 'nsidc_myi', nsidc_sia_dom, dst_dom,
+         array=myi, vmin=1, vmax=2, cmap=cm.ice, text='MYI NSIDC', title='2016-12-31')
+make_map('tmp_2017-03-29', 'nsidc_myi', nsidc_sia_dom, dst_dom,
+         array=myi, vmin=1, vmax=2, cmap=cm.ice, text='MYI NSIDC', title='2017-03-29')
+
+"""
+!montage\
+    tmp_2012-12-31_nsidc_myi.png\
+    tmp_2013-12-31_nsidc_myi.png\
+    tmp_2014-12-31_nsidc_myi.png\
+    tmp_2015-12-31_nsidc_myi.png\
+    tmp_2016-12-31_nsidc_myi.png\
+    tmp_2017-03-29_nsidc_myi.png\
+    -tile 6x1 -geometry +0+0 figure_09_myi_nsidc.png 
+"""
+    
+# source domain
+osi_nsr = NSR('+proj=stere +a=6378273 +b=6356889.44891 +lat_0=90 +lat_ts=70 +lon_0=-45')
+osi_sic_dom = Domain(osi_nsr, '-te -3850000 -5350000 3750000 5850000 -tr 10000 10000')
+for yy in [2012, 2013, 2014, 2015, 2016]:
+    make_map('/files/sea_ice_age/nersc_osi_fv1_2017_conc/sia/%d-12-31_sia.npz' % yy,
+             'myi', osi_sic_dom, dst_dom,
+             vmin=0, vmax=1, cmap=cm.ice, text='MYI NERSC')
+
+make_map('/files/sea_ice_age/nersc_osi_fv1_2017_conc/sia/2017-03-29_sia.npz',
+         'myi', osi_sic_dom, dst_dom,
+         vmin=0, vmax=1, cmap=cm.ice, text='MYI NERSC')
+"""
+!montage\
+    /files/sea_ice_age/nersc_osi_fv1_2017_conc/sia/2012-12-31_sia.npz_myi.png\
+    /files/sea_ice_age/nersc_osi_fv1_2017_conc/sia/2013-12-31_sia.npz_myi.png\
+    /files/sea_ice_age/nersc_osi_fv1_2017_conc/sia/2014-12-31_sia.npz_myi.png\
+    /files/sea_ice_age/nersc_osi_fv1_2017_conc/sia/2015-12-31_sia.npz_myi.png\
+    /files/sea_ice_age/nersc_osi_fv1_2017_conc/sia/2016-12-31_sia.npz_myi.png\
+    /files/sea_ice_age/nersc_osi_fv1_2017_conc/sia/2017-03-29_sia.npz_myi.png\
+    -tile 6x1 -geometry +0+0 figure_09_myi_nersc.png 
+"""
 
 """
 #### PLOT RESULTS OF THE NSIDC ICE AGE ALGORITHM

@@ -10,7 +10,7 @@ from iceagelib import *
 
 #ftp://osisaf.met.no/archive_test/ice/drift_lr/osi405c_demo_archive/2013/01/ice_drift_nh_polstere-625_multi-oi_201301191200-201301211200.nc
 #wget -w 1 -r -nc -nd -A 'ice_drift_nh_*.nc' -P /Data/sat/downloads/osi405c_demo_archive/ ftp://osisaf.met.no/archive_test/ice/drift_lr/osi405c_demo_archive/2016
-#wget -nc -nd --http-user=korosov --http-password= --load-cookies mycookies.txt --save-cookies mycookies.txt --keep-session-cookies --no-check-certificate--auth-no-challenge -r --reject "index.html*" -np -e robots=off https://daacdata.apps.nsidc.org/pub/DATASETS/nsidc0116_icemotion_vectors_v3/data/north/week/2015/
+#wget -nc -nd --http-user=korosov --http-password= --load-cookies mycookies.txt --save-cookies mycookies.txt --keep-session-cookies --no-check-certificate --auth-no-challenge -r -np -e robots=off https://daacdata.apps.nsidc.org/pub/DATASETS/nsidc0611_seaice_age_v3/data/2015/
 
 ### NSIDC U/V
 nsidc_sid_dir = '/files/nsidc0116_icemotion_vectors_v3/'
