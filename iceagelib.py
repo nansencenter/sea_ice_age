@@ -7,7 +7,6 @@ import numpy as np
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 
-from netCDF4 import Dataset
 import pygrib
 
 from nansat import Nansat, Nansatmap
@@ -15,6 +14,7 @@ from ovl_plugins.lib.interpolation import fill_gaps_nn
 from ovl_plugins.lib.lagrangian import rungekutta4
 from scipy.ndimage.interpolation import zoom
 from scipy.ndimage.filters import gaussian_filter, maximum_filter
+from cmocean import cm
 
 
 #### IMPLEMENT THE NSIDC ICE AGE ALGORITHM
@@ -38,6 +38,7 @@ def zoom_nan(img, factor, order=1, sigma=0):
         img: matrix to resize
         factor: resize factor
         order: interpolation order
+        sigma: for gaussian filtering
     Output:
         img: resized image
     '''
@@ -63,7 +64,7 @@ def get_nsidc_uv(ifile, src_res=25000, h=7*24*60*60, factor=1, order=1, sigma=0,
     u = d[0::3].reshape(361,361) / 1000. # m/s
     v = d[1::3].reshape(361,361) / 1000. # m/s
     c = d[2::3].reshape(361,361)
-    c[c > 0] = 100
+    c[c > 0] = 1.
     u[c == 0] = np.nan
     v[c == 0] = np.nan
     
@@ -116,7 +117,7 @@ def get_osi_sic(idir, idate, n=0):
         pole_mask = c.mask
         pole_mask = maximum_filter(pole_mask, 3)
         c_f = fill_gaps_nn(c.data, 10, pole_mask)
-        c_f[np.isnan(c_f)] = 100
+        c_f[np.isnan(c_f)] = 1.
         c_f[c_f < 0] = np.nan
     else:
         # NEW
@@ -129,12 +130,13 @@ def get_osi_uvf(ifile):
     ''' Load U,V status flag from OSISAF LR drift file '''
     n0 = Nansat(ifile, mapperName='generic')
     status_flag = n0['status_flag']
-    u = n0['dX']*1000/60/60/48
+    dX = n0['dX']
     if n0.has_band('dY_v1p4'):
         dY = n0['dY_v1p4']
     else:
         dY = n0['dY']
-    v = dY*1000/60/60/48
+    u = dX*1000./48./60./60.
+    v = dY*1000./48./60./60.
     return u, v, status_flag
 
 def fill_osi_uv(u, v, c, sid_dom, sic_dom, nn_dst=5, sigma=2, **kwargs):
@@ -164,7 +166,7 @@ def get_osi_uvc_filled(sid_file, src_res=10000, h=24*60*60, factor=1, **kwargs):
     u =  u * factor * h / src_res # pix
     v = -v * factor * h / src_res # pix
 
-    return u, v, c
+    return u, v, c/100.
 
 def get_osi_date(osi_file):
     ''' Get date of OSISAF file '''
@@ -269,7 +271,7 @@ def propagate_nersc(i_start, i_end, ifiles, reader, get_date, odir,
 
     # initialize ice age fraction map and set all concentrations to 100% 
     if conc:
-        ice0 = c0 / 100.
+        ice0 = c0
     else:
         ice0 = np.zeros(c0.shape) # water is zero years old
         ice0[c0 > 0] = 1 # on 15 September all ice is 1 year old
@@ -401,7 +403,7 @@ def propagate_nersc(i_start, i_end, ifiles, reader, get_date, odir,
         
         # use SIC
         if conc:
-            ice_conc = c / 100.
+            ice_conc = c
         else:
             ice_conc = np.ones_like(sum_prev_ice1)
 
@@ -466,11 +468,11 @@ def get_mean_age(idir, thedate, ice_mask):
     ice_age_weights = np.array(ice_age_weights)
 
     ice_age_mean = ice_age_sum / ice_age_wsum
-    # add one year ice and water/landmask from nsidc_age
+    # add one year ice and water/landmask
     ice_age_mean[np.isnan(ice_age_mean)] = 1
     
     myi_weight = ice_age_weights.sum(axis=0)
-    fyi_weight = 1 - myi_weight
+    fyi_weight = ice_mask - myi_weight
     fyi_weight[ice_mask == 0] = 0
     
     ice_age_weights = np.array([fyi_weight] + list(ice_age_weights))
@@ -545,7 +547,8 @@ def save_mean_age(sid_files, icemap_dir, reader, get_date, vmin=0, vmax=5, **kwa
                     
 def make_map(ifile, prod, src_dom, dst_dom, array=None,
              vmin=0, vmax=5, dpi=250, cmap='jet',
-             title=None, text=None, textx=100000, texty=5000000, fontsize=18):
+             title=None, text=None, textx=100000, texty=5000000, fontsize=18,
+             water=None):
     ''' Make map with a product '''
     if array is None:
         sia = np.load(ifile)[prod]
@@ -553,12 +556,16 @@ def make_map(ifile, prod, src_dom, dst_dom, array=None,
         sia = array
     sia_pro = reproject_ice(src_dom, dst_dom, sia)
     nmap = Nansatmap(dst_dom, resolution='l')
+    if water is not None:
+        wat_pro = reproject_ice(src_dom, dst_dom, water)
+        sia_pro[wat_pro > 0] = np.nan
     nmap.imshow(sia_pro, vmin=vmin, vmax=vmax, cmap=cmap)
     if title is not None:
         plt.title(title, fontsize=fontsize)
     if text is not None:
         plt.text(textx, texty, text, fontsize=fontsize, va='top', bbox=dict(facecolor='white', alpha=0.9))
     nmap.save('%s_%s.png' % (ifile, prod), dpi=dpi)
+    return nmap
 
 def save_legend(cmap, bounds, label, filename, format='%1i'):
     # colorbar for SIA
@@ -577,7 +584,7 @@ def save_legend(cmap, bounds, label, filename, format='%1i'):
 
 def get_nsidc_raw_sia(ifile):
     nsidc_age = np.fromfile(ifile, np.uint8).reshape(361*2,361*2).astype(np.float32)
-    nsidc_age[nsidc_age==255] = np.nan
+    nsidc_age[maximum_filter(nsidc_age, 3)==255] = np.nan
     nsidc_age /= 5.
 
     return nsidc_age

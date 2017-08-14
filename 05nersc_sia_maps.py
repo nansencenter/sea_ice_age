@@ -37,49 +37,35 @@ idir = nsidc_sia_dir + 'sia/'
 ifiles = sorted(glob.glob(idir + '201[3,4,5]-??-??_sia.npz'))
 
 prod = 'sia'
-[make_map(ifile, prod, nsidc_sia_dom, dst_dom) for ifile in ifiles]
+for ifile in ifiles:
+    make_map(ifile, prod, nsidc_sia_dom, dst_dom)
 
 prod = 'myi'
-[make_map(ifile, prod, nsidc_sia_dom, dst_dom, vmin=0, vmax=1, cmap='magma') for ifile in ifiles]
+for ifile in ifiles:
+    make_map(ifile, prod, nsidc_sia_dom, dst_dom, vmin=0, vmax=1, cmap=cm.ice)
 
 
 ### OSI U/V
 osi_sid_dir = '/files/sea_ice_age/osi405c_demo_archive_filled_v1/'
-osi_sia_dir = '/files/sea_ice_age/nersc_osi_fv1_2017_conc/'
+osi_sia_dir = '/files/sea_ice_age/nersc_osi_fv1_2017_conc_repro/'
 reader = get_osi_uvc_filled
 get_date = get_osi_date
 # source domain
 osi_nsr = NSR('+proj=stere +a=6378273 +b=6356889.44891 +lat_0=90 +lat_ts=70 +lon_0=-45')
 osi_sic_dom = Domain(osi_nsr, '-te -3850000 -5350000 3750000 5850000 -tr 10000 10000')
 
-# save mean age
-osi_sid_files = sorted(glob.glob(osi_sid_dir + '*_2012100*.npz'))
-save_mean_age(osi_sid_files, osi_sia_dir, reader, get_date)
-osi_sid_files = sorted(glob.glob(osi_sid_dir + '*_201212*.npz'))
-save_mean_age(osi_sid_files, osi_sia_dir, reader, get_date)
-osi_sid_files = sorted(glob.glob(osi_sid_dir + '*_2013032*.npz'))
-save_mean_age(osi_sid_files, osi_sia_dir, reader, get_date)
-osi_sid_files = sorted(glob.glob(osi_sid_dir + '*_2013091*.npz'))
-save_mean_age(osi_sid_files, osi_sia_dir, reader, get_date)
-osi_sid_files = sorted(glob.glob(osi_sid_dir + '*_201312*.npz'))
-save_mean_age(osi_sid_files, osi_sia_dir, reader, get_date)
-osi_sid_files = sorted(glob.glob(osi_sid_dir + '*_201412*.npz'))
-save_mean_age(osi_sid_files, osi_sia_dir, reader, get_date)
-osi_sid_files = sorted(glob.glob(osi_sid_dir + '*_201512*.npz'))
-save_mean_age(osi_sid_files, osi_sia_dir, reader, get_date)
-osi_sid_files = sorted(glob.glob(osi_sid_dir + '*_201612*.npz'))
-save_mean_age(osi_sid_files, osi_sia_dir, reader, get_date)
-osi_sid_files = sorted(glob.glob(osi_sid_dir + '*_201703*.npz'))
-save_mean_age(osi_sid_files, osi_sia_dir, reader, get_date)
-
-for yy in [2013, 2014, 2015, 2016, 2017]:
+for yy in [2012, 2013, 2014]:
     # save mean age
-    osi_sid_files = sorted(glob.glob(osi_sid_dir + '*_%d*.npz' % yy))[::7]
+    osi_sid_files = sorted(glob.glob(osi_sid_dir + '*_%d09*.npz' % yy))
+    #import ipdb; ipdb.set_trace()
     save_mean_age(osi_sid_files, osi_sia_dir, reader, get_date)
     # make maps
     idir = osi_sia_dir + 'sia/'
-    ifiles = sorted(glob.glob(idir + '*%d-??-??_sia.npz' % yy))
+    ifiles = sorted(glob.glob(idir + '*%d-09-??_sia.npz' % yy))
     prod = 'sia'
-    [make_map(ifile, prod, osi_sic_dom, dst_dom) for ifile in ifiles]
+    for ifile in ifiles:
+        print ifile
+        make_map(ifile, prod, osi_sic_dom, dst_dom, vmin=0, vmax=5, cmap='jet')
     prod = 'myi'
-    [make_map(ifile, prod, osi_sic_dom, dst_dom, vmin=0, vmax=1, cmap='magma') for ifile in ifiles]
+    for ifile in ifiles:
+        make_map(ifile, prod, osi_sic_dom, dst_dom, vmin=0, vmax=1, cmap=cm.ice, text=os.path.basename(ifile).split('_')[0])

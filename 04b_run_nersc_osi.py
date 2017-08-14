@@ -25,16 +25,16 @@ osi_sid_files = sorted(glob.glob(osi_sid_dir + '*.npz'))
 #raise
 
 ## 2012 - 2017
-years = [2012, 2013, 2014, 2015, 2016]
+years = [2012, 2013, 2014]
 months = [10, 9, 9, 9, 9]
 days = [1, 15, 15, 15, 15]
-i_end = get_osi_i_of_file(2017, 3, 29, osi_sid_files)
+i_end = get_osi_i_of_file(2014, 12, 31, osi_sid_files)
 
 #conc = False
 #odir = '/files/sea_ice_age/nersc_osi_fv1_2017/'
 
 conc = True
-odir = '/files/sea_ice_age/nersc_osi_fv1_2017_conc/'
+odir = '/files/sea_ice_age/nersc_osi_fv1_2017_conc_repro/'
 
 if not os.path.exists(odir):
     os.makedirs(odir)

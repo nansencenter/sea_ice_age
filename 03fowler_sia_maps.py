@@ -35,7 +35,7 @@ ifiles =[
 '/files/sea_ice_age/fowler_nsidc_1985_f04/sia/1984-12-30_sia.npz',
 '/files/sea_ice_age/fowler_nsidc_1985_f08/sia/1984-12-30_sia.npz',
 ]
-[make_map(ifile, prod, nsidc_sia_dom, dst_dom, vmin=1, vmax=8, cmap=cm.thermal_r) for ifile in ifiles]
+[make_map(ifile, prod, nsidc_sia_dom, dst_dom, vmin=1, vmax=8, cmap='jet') for ifile in ifiles]
 raise
 
 
