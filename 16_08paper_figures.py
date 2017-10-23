@@ -36,24 +36,24 @@ make_map('/files/sea_ice_age/fowler_nsidc_2016_f02/sia/2015-12-31_sia.npz',
          'sia', nsidc_sia_dom, dst_dom,
          vmin=1, vmax=vmax, cmap=cmap, text='A')
 
-make_map('/files/sea_ice_age/fowler_osi_fv1/sia/2015-12-31_sia.npz',
+make_map('/files/sea_ice_age/fowler_osi_fv2/sia/2015-12-31_sia.npz',
          'sia', osi_sic_dom, dst_dom,
          vmin=1, vmax=vmax, cmap=cmap, text='B')
 
-make_map('/files/sea_ice_age/nersc_osi_fv1_2017/sia/2016-01-01_sia.npz',
+make_map('/files/sea_ice_age/nersc_osi_fv2_2017/sia/2016-01-01_sia.npz',
          'sia', osi_sic_dom, dst_dom,
          vmin=1, vmax=vmax, cmap=cmap, text='C', water=water)
 
-make_map('/files/sea_ice_age/nersc_osi_fv1_2017_conc/sia/2016-01-01_sia.npz',
+make_map('/files/sea_ice_age/nersc_osi_fv2_2017_conc_repro/sia/2016-01-01_sia.npz',
          'sia', osi_sic_dom, dst_dom,
          vmin=1, vmax=vmax, cmap=cmap, text='D', water=water)
 
 """
-montage\
+!montage\
  /files/sea_ice_age/fowler_nsidc_2016_f02/sia/2015-12-31_sia.npz_sia.png\
- /files/sea_ice_age/fowler_osi_fv1/sia/2015-12-31_sia.npz_sia.png\
- /files/sea_ice_age/nersc_osi_fv1_2017/sia/2016-01-01_sia.npz_sia.png\
- /files/sea_ice_age/nersc_osi_fv1_2017_conc/sia/2016-01-01_sia.npz_sia.png\
+ /files/sea_ice_age/fowler_osi_fv2/sia/2015-12-31_sia.npz_sia.png\
+ /files/sea_ice_age/nersc_osi_fv2_2017/sia/2016-01-01_sia.npz_sia.png\
+ /files/sea_ice_age/nersc_osi_fv2_2017_conc_repro/sia/2016-01-01_sia.npz_sia.png\
  -tile 2x2 -geometry +0+0 figure_08_sia_compar_methods.png 
 """
 

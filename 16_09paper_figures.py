@@ -17,13 +17,15 @@ from cmocean import cm
 
 
 ### FIGURE 9. Comparison of MYI
+# destination domain
+dst_nsr = NSR('+proj=stere +datum=WGS84 +ellps=WGS84 +lat_0=90 +lon_0=0  +lat_ts=70 +no_defs')
+dst_dom = Domain(dst_nsr, '-te -2000000 -2400000 2000000 2600000 -tr 10000 10000')
+
+
 ### NSIDC
 # source domain
 nsidc_nsr = NSR('+proj=laea +datum=WGS84 +ellps=WGS84 +lat_0=90 +lon_0=0 +no_defs')
 nsidc_sia_dom = Domain(nsidc_nsr, '-te -4512500 -4512500 4512500 4512500 -tr 12500 12500')
-# destination domain
-dst_nsr = NSR('+proj=stere +datum=WGS84 +ellps=WGS84 +lat_0=90 +lon_0=0  +lat_ts=70 +no_defs')
-dst_dom = Domain(dst_nsr, '-te -2000000 -2400000 2000000 2600000 -tr 10000 10000')
 text='NSIDC'
 for yy in [2012, 2013, 2014, 2015]:
     sia = get_nsidc_raw_sia('/files/nsidc0611_seaice_age_v3/iceage.grid.week.%d.52.n.v3.bin' % yy)
@@ -54,7 +56,7 @@ make_map('tmp_2017-03-29', 'nsidc_myi', nsidc_sia_dom, dst_dom,
 # source domain
 osi_nsr = NSR('+proj=stere +a=6378273 +b=6356889.44891 +lat_0=90 +lat_ts=70 +lon_0=-45')
 osi_sic_dom = Domain(osi_nsr, '-te -3850000 -5350000 3750000 5850000 -tr 10000 10000')
-text = 'NERSC'
+text = 'SICCI'
 for dst_date in [
     dt.datetime(2012,12,31),
     dt.datetime(2013,12,31),
@@ -62,7 +64,7 @@ for dst_date in [
     dt.datetime(2015,12,31),
     dt.datetime(2016,12,31),
     dt.datetime(2017,3,29)]:
-    ifile = '/files/sea_ice_age/nersc_osi_fv1_2017_conc/sia/%s_sia.npz' % dst_date.strftime('%Y-%m-%d')
+    ifile = '/files/sea_ice_age/nersc_osi_fv2_2017_conc_repro/sia/%s_sia.npz' % dst_date.strftime('%Y-%m-%d')
     myi = np.load(ifile)['myi']
     sia = np.load(ifile)['sia']
     wat = (sia < 0).astype(float)
@@ -89,7 +91,7 @@ dst_dom = Domain(dst_nsr, '-te -2000000 -2400000 2000000 2600000 -tr 10000 10000
 osi_nsr = NSR('+proj=stere +a=6378273 +b=6356889.44891 +lat_0=90 +lat_ts=70 +lon_0=-45')
 brem_dom = Domain(osi_nsr, '-te -3843750 -5343750 3756250 5856250 -tr 12500 12500')
 
-dates = ['2013-12-31', '2014-12-31', '2015-12-31']
+dates = ['2013-12-31', '2014-12-31', '2015-12-31', '2016-12-31', '2017-03-29']
 for date in dates:
     brem_date = parse(date)
     brem_file = '/files/sea_ice_age/bremensit/MYI-NMYI-CORRECTION-%s.nc' % brem_date.strftime('%Y%m%d')
@@ -98,8 +100,8 @@ for date in dates:
     make_map('tmp_%s' % date, 'bremen_myi', brem_dom, dst_dom,
              array=brem_myi, vmin=0, vmax=100, cmap=cm.ice)
 
-dates = ['2012-12-31', '2016-12-31', '2017-03-29']
-text = 'BREMEN'
+dates = ['2012-12-31']
+text = 'BU'
 for date in dates:
     make_map('tmp_%s' % date, 'bremen_myi', brem_dom, dst_dom,
          array=np.ones(brem_myi.shape), vmin=-10, vmax=0, cmap=cm.ice, text=text)
@@ -165,3 +167,11 @@ for osi_date in [
 
 save_legend(cm.ice, np.linspace(0,100,20), 'Multi-Year Ice Concentration, %', 'figure_09_myi_legend.png')
 
+"""
+!montage\
+    figure_09_myi_nsidc.png\
+    figure_09_myi_nersc.png\
+    figure_09_myi_osisaf.png\
+    figure_09_myi_bremen.png\
+    -tile 1x4 -geometry +0+0 figure_09_myi.png 
+"""

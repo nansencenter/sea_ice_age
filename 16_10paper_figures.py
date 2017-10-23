@@ -62,7 +62,7 @@ osi_nsr = NSR('+proj=stere +a=6378273 +b=6356889.44891 +lat_0=90 +lat_ts=70 +lon
 osi_sic_dom = Domain(osi_nsr, '-te -3850000 -5350000 3750000 5850000 -tr 10000 10000')
 landmask = np.load('landmask.npz')['landmask']
 
-nersc_sia_files = sorted(glob.glob('/files/sea_ice_age/nersc_osi_fv1_2017_conc/sia/201[2,3,4,5,6,7]*_sia.npz'))
+nersc_sia_files = sorted(glob.glob('/files/sea_ice_age/nersc_osi_fv2_2017_conc/sia/201[2,3,4,5,6,7]*_sia.npz'))
 nersc_age_area = []
 nersc_dates = []
 for nersc_sia_file in nersc_sia_files:
@@ -178,7 +178,7 @@ plt.ylabel('Area, 10$^6$ km$^2$')
 plt.ylim([0,8.5])
 plt.setp(ax1.get_xticklabels(), visible=False)
 #plt.legend(['Bremen', 'OSI', '0-YO', '1-YO', '2-YO', '3-YO', '4-YO', '5-YO', ], loc=2, fontsize=8)
-plt.legend(['UoB', 'OSI-SAF', '1st YI', '2nd YI', '3rd YI', '4th YI', '5th YI', '6th YI', ],
+plt.legend(['UB', 'OSI-SAF', '1st YI', '2nd YI', '3rd YI', '4th YI', '5th YI', '6th YI', ],
            loc=2, fontsize=8, ncol=2)
 plt.text(dt.datetime(2015,8,1), 7.5, 'NSIDC', fontsize=14)
 
@@ -187,12 +187,12 @@ for i in range(1, nersc_age_cum_area.shape[0]):
     plt.fill_between(nersc_dates, nersc_age_cum_area[i]*100/1000000., 0, label='%s-y.o.' % (i-1))
 plt.plot(brem_dates, brem_myi_areas*100/1000000., 'k.', ms=3)
 plt.plot(osi_dates[osi_gpi], osi_myi_areas[osi_gpi]*100/1000000., '*', ms=1, c='#ffff00')
-plt.text(dt.datetime(2015,8,1), 7.5, 'NERSC', fontsize=14)
+plt.text(dt.datetime(2015,8,1), 7.5, 'SICCI', fontsize=14)
 
 #plt.title('NERSC')
 plt.ylabel('Area, 10$^6$ km$^2$')
 plt.ylim([0,8.5])
-#plt.xlim([dt.datetime(2013,1,1), dt.datetime(2016,1,1)])
+plt.xlim([dt.datetime(2013,1,1), dt.datetime(2016,1,1)])
 plt.xlabel('Date')
 
 plt.tight_layout(pad=0)

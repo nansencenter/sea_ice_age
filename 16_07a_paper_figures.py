@@ -16,6 +16,9 @@ from iceagelib import *
 from cmocean import cm
 
 ### =====================
+
+idir = '/files/sea_ice_age/nersc_osi_fv2_2017_conc_repro/sia/'
+
 #####  FIGURE 7. Propagation
 # destination domain
 dst_nsr = NSR('+proj=stere +datum=WGS84 +ellps=WGS84 +lat_0=90 +lon_0=0  +lat_ts=70 +no_defs')
@@ -24,27 +27,29 @@ osi_nsr = NSR('+proj=stere +a=6378273 +b=6356889.44891 +lat_0=90 +lat_ts=70 +lon
 osi_sic_dom = Domain(osi_nsr, '-te -3850000 -5350000 3750000 5850000 -tr 10000 10000')
 
 ## FIRST COLUMN
-sif = np.load('/files/sea_ice_age/nersc_osi_fv1_2017_conc/sia/2012-10-02_sia.npz')['sif']
+sif = np.load(idir+'2012-10-01_sia.npz')['sif']
+#water = (sif.sum(axis=0) == 0).astype(np.uint8)
 make_map('tmp_2012-10-01',
-         '2yi', osi_sic_dom, dst_dom, title='2012-10-01', 
-          vmin=0, vmax=1, cmap=cm.ice, array=sif[1], text='A: $C_{2YI}$')
+         '2yi', osi_sic_dom, dst_dom, 
+          vmin=0, vmax=1, cmap=cm.ice, array=sif[1],
+          title='2012-10-01', text='A: $C_{2YI}$')
 
-sif = np.load('/files/sea_ice_age/nersc_osi_fv1_2017_conc/sia/2013-01-01_sia.npz')['sif']
+sif = np.load(idir+'2013-01-01_sia.npz')['sif']
 make_map('tmp_2013-01-01',
          '2yi', osi_sic_dom, dst_dom, title='2013-01-01', 
           vmin=0, vmax=1, cmap=cm.ice, array=sif[1], text='B: $C_{2YI}$')
 
-sif = np.load('/files/sea_ice_age/nersc_osi_fv1_2017_conc/sia/2013-04-04_sia.npz')['sif']
+sif = np.load(idir+'2013-04-04_sia.npz')['sif']
 make_map('tmp_2013-04-01',
          '2yi', osi_sic_dom, dst_dom, title='2013-04-01', 
           vmin=0, vmax=1, cmap=cm.ice, array=sif[1], text='C: $C_{2YI}$')
 
-sif = np.load('/files/sea_ice_age/nersc_osi_fv1_2017_conc/sia/2013-07-01_sia.npz')['sif']
+sif = np.load(idir+'2013-07-01_sia.npz')['sif']
 make_map('tmp_2013-07-01',
          '2yi', osi_sic_dom, dst_dom, title='2013-07-01', 
           vmin=0, vmax=1, cmap=cm.ice, array=sif[1], text='D: $C_{2YI}$')
 
-sif = np.load('/files/sea_ice_age/nersc_osi_fv1_2017_conc/sia/2013-10-01_sia.npz')['sif']
+sif = np.load(idir+'2013-10-01_sia.npz')['sif']
 make_map('tmp_2013-10-01',
          '3yi', osi_sic_dom, dst_dom, title='2013-10-01', 
           vmin=0, vmax=1, cmap=cm.ice, array=sif[2], text='E: $C_{3YI}$')

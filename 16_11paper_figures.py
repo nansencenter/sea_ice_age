@@ -64,22 +64,32 @@ nersc_areas_cs = np.cumsum(nersc_areas, axis=0)
 brm_areas = np.array(brm_areas)*100/1000000.
 osi_areas = np.array(osi_areas)*100/1000000.
 
+## calculate MYI reduction speed
+nsidc_myi_decrease_rel = (nsidc_areas_cs[-3][:-1] - nsidc_areas_cs[-4][1:]) / nsidc_areas_cs[-3][:-1]
+nsidc_myi_decrease_abs = (nsidc_areas_cs[-3][:-1] - nsidc_areas_cs[-4][1:]) 
+
+nersc_myi_decrease_abs = nersc_areas_cs[-3][:-1] - nersc_areas_cs[-4][1:]
+nersc_myi_decrease_rel = (nersc_areas_cs[-3][:-1] - nersc_areas_cs[-4][1:]) / nersc_areas_cs[-3][:-1]
+
+print (nersc_myi_decrease_rel / nsidc_myi_decrease_rel).mean()
+print (nersc_myi_decrease_abs / nsidc_myi_decrease_abs).mean()
+
 plt.figure(figsize=(8,4))
 for i in range(8,0,-1):
-    plt.bar([0, 3, 6, 9], nsidc_areas[i+1], bottom=nsidc_areas_cs[i], color='C%d' % (8-i))
+    plt.bar([0, 3, 6, 9], nsidc_areas[i+1], 0.95, bottom=nsidc_areas_cs[i], color='C%d' % (8-i))
 
-plt.plot([0.5, 3.5, 6.5, 9.5], brm_areas, '.k')
+plt.plot([3.5, 6.5, 9.5], brm_areas[1:], '.k')
 plt.plot([0.5, 3.5, 6.5, 9.5], osi_areas, '*k', ms=7)
 
-plt.legend(['UoB', 'OSI-SAF', '1st YI', '2nd YI', '3rd YI', '4th YI', '5th YI', '6th YI', ],
+plt.legend(['UB', 'OSI-SAF', '1st YI', '2nd YI', '3rd YI', '4th YI', '5th YI', '6th YI', ],
            loc=1, fontsize=8)
 
 for i in range(8,0,-1):
-    plt.bar([1, 4, 7,10], nersc_areas[i+1], bottom=nersc_areas_cs[i], color='C%d' % (8-i))
+    plt.bar([1, 4, 7,10], nersc_areas[i+1], 0.95, bottom=nersc_areas_cs[i], color='C%d' % (8-i))
 
 for x in [0,3,6, 9]:
     plt.text(x, 5, 'NSIDC', rotation=90)
-    plt.text(x+1, 5, 'NERSC', rotation=90)
+    plt.text(x+1, 5, 'SICCI', rotation=90)
 
 plt.xlim([-1, 12])    
 plt.xticks([0.5, 3.5, 6.5, 9.5], ['2013-01-01', '2014-01-01', '2015-01-01', '2016-01-01'])

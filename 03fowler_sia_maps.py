@@ -40,7 +40,7 @@ raise
 
 
 ## FOWLER OSI
-save_max_age('/files/sea_ice_age/fowler_osi_fv1/', 1)
+save_max_age('/files/sea_ice_age/fowler_osi_fv2/', 1)
 
 # source domain
 osi_nsr = NSR('+proj=stere +a=6378273 +b=6356889.44891 +lat_0=90 +lat_ts=70 +lon_0=-45')

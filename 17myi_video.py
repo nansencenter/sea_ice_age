@@ -28,7 +28,7 @@ brem_dom = Domain(osi_nsr, '-te -3843750 -5343750 3756250 5856250 -tr 12500 1250
 
 idir = '/files/sea_ice_age/bremensit/'
 osi_sia_dir = '/files/sea_ice_age/nersc_osi_fv1_2017_conc/'
-
+"""
 #ifiles = sorted(glob.glob(idir + 'MYI-NMYI-CORRECTION-*.nc'))
 #for ifile in ifiles:
 #    print ifile
@@ -66,10 +66,10 @@ for i, ifile in enumerate(ifiles):
     shutil.copy(ifile, idir + 'joined_frame_%002d.png' % i)
     
 #avconv -y -r 24 -i /files/sea_ice_age/bremensit/joined_frame_%002d.png -r 25 -c:v libx264 -crf 20  -pix_fmt yuv420p -b 5000 myi_compar.mov
-
+"""
 
 #### MOVIE OF 2012 propagation only
-ifiles = sorted(glob.glob('/files/sea_ice_age/nersc_osi_fv1_2017_conc/sia/201[2,3]*_sia.npz_myi.png'))
+ifiles = sorted(glob.glob('/files/sea_ice_age/nersc_osi_fv3_2017_conc/sia/201[2,3, 4]*_sia.npz_myi.png'))
 for i, ifile in enumerate(ifiles):
     print i, ifile
     a = plt.imread(ifile)
@@ -77,4 +77,4 @@ for i, ifile in enumerate(ifiles):
     plt.imsave('myi_frame_%03d.png' % i, a)
 
     
-#avconv -y -r 24 -i myi_frame_%02d.png -r 25 -c:v libx264 -crf 20  -pix_fmt yuv420p -b 5000 myi_video.mov
+#avconv -y -r 24 -i myi_frame_%03d.png -r 25 -c:v libx264 -crf 20  -pix_fmt yuv420p -b 5000 myi_video_fv3.mov

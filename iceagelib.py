@@ -14,6 +14,7 @@ from ovl_plugins.lib.interpolation import fill_gaps_nn
 from ovl_plugins.lib.lagrangian import rungekutta4
 from scipy.ndimage.interpolation import zoom
 from scipy.ndimage.filters import gaussian_filter, maximum_filter
+from scipy.ndimage.filters import median_filter
 from cmocean import cm
 
 
@@ -31,6 +32,13 @@ def nangaussian_filter(img, sigma):
     img0 /= imgw
     img0[np.isnan(img)] = np.nan
     return img0
+
+def nan_median_filter(arr, size):
+    ''' Median filter for images with NaN '''
+    arr_fil = fill_gaps_nn(arr, size)
+    arr_med = median_filter(arr_fil, size)
+    arr_med[np.isnan(arr)] = np.nan
+    return arr_med
 
 def zoom_nan(img, factor, order=1, sigma=0):
     ''' Increase resolution of image with gaps  filled by nan
@@ -96,7 +104,7 @@ def get_osi_i_of_file(year, month, day, ifiles):
         if os.path.basename(ifile).split('_')[-1].startswith('%04d%02d%02d' % (year, month, day)):
             return i
 
-def get_osi_sic(idir, idate, n=0):
+def get_osi_sic(idir, idate, force_grb=False, n=0):
     ''' Get sea ice concentration from downloaded GRIB file '''
     sic_files = glob.glob(idir + 'ice_conc*%s????.grb' % idate.strftime('%Y%m%d'))
 
@@ -104,9 +112,14 @@ def get_osi_sic(idir, idate, n=0):
         print 'NO ', idate, 
         idate += dt.timedelta(1)
         print 'TRY ', idate
-        return get_osi_sic(idir, idate, n=n+1)
+        return get_osi_sic(idir, idate, force_grb=force_grb, n=n+1)
 
     ifile = sic_files[0]
+    # try to load C from presaved (corrected) NPZ file
+    ifile_npz = ifile + '.npz'
+    if not force_grb and os.path.exists(ifile_npz):
+        return np.load(ifile_npz)['c']
+
     grbs = pygrib.open(ifile)
     for grb in grbs:
         if 'Ice cover' in grb['name']:
@@ -116,12 +129,12 @@ def get_osi_sic(idir, idate, n=0):
         # OLD
         pole_mask = c.mask
         pole_mask = maximum_filter(pole_mask, 3)
-        c_f = fill_gaps_nn(c.data, 10, pole_mask)
+        c_f = fill_gaps_nn(c.data / 100., 10, pole_mask)
         c_f[np.isnan(c_f)] = 1.
         c_f[c_f < 0] = np.nan
     else:
         # NEW
-        c_f = c.data
+        c_f = c.data / 100.
         c_f[c.mask] = np.nan
         
     return c_f
@@ -159,6 +172,55 @@ def fill_osi_uv(u, v, c, sid_dom, sic_dom, nn_dst=5, sigma=2, **kwargs):
 
     return uv_pro[0], uv_pro[1], c
 
+def fill_med_osi_uv(u, v, c, sid_dom_x, sic_dom, zf=2, med=7, nn_dst=5, **kwargs):
+    ''' Median filter, resample and fill gaps in UV data using C'''
+    uv_pro = []
+    for uv in [u,v]:
+        # increase resolution
+        uvz = zoom_nan(uv, zf)
+        # median filter
+        uvm = nan_median_filter(uvz, med)
+        # upscale U,V to the grid of C
+        uvp = reproject_ice(sid_dom_x, sic_dom, uvm, 2)
+        # fill LAND with 0 speed
+        #uvp[np.isnan(c)] = 0
+        # extrapolate U,V (from ice onto empty pixels)
+        uvp = fill_gaps_nn(uvp, nn_dst)
+        # replace WATER pixels with NAN
+        uvp[c == 0] = np.nan
+        # replace LAND pixels with NAN
+        uvp[np.isnan(c)] = np.nan
+        uv_pro.append(uvp)
+
+    return uv_pro[0], uv_pro[1], c
+
+def fill_med_osi_uv_2(u, v, c, sid_dom_x, sic_dom, uvf0=None, zf=2, med=7, nn_dst=5, **kwargs):
+    ''' Median filter, resample and fill gaps in UV data using C and previous UV'''
+    uv_pro = []
+    uvf1 = []
+    for i, uv in enumerate([u,v]):
+        # increase resolution
+        uvz = zoom_nan(uv, zf)
+        # fill gaps with nearest neigbour
+        uvf = fill_gaps_nn(uvz, 100)
+        uvf1.append(uvf)
+        # median filter (also previous UV, if exists)
+        if uvf0 is None:
+            uvm = median_filter(uvf, med)
+        else:
+            uvm = median_filter(np.dstack([uvf0[i], uvf]), (med, med, 2), mode='mirror')[:,:,0]
+        
+        # upscale U,V to the grid of C
+        uvp = reproject_ice(sid_dom_x, sic_dom, uvm, 2)
+        # replace WATER pixels with NAN
+        uvp[c == 0] = np.nan
+        # replace LAND pixels with NAN
+        uvp[np.isnan(c)] = np.nan
+        uv_pro.append(uvp)
+
+    return uv_pro[0], uv_pro[1], c, uvf1
+
+
 def get_osi_uvc_filled(sid_file, src_res=10000, h=24*60*60, factor=1, **kwargs):
     ''' Load presaved SID and SIC '''
     data = np.load(sid_file)
@@ -166,7 +228,7 @@ def get_osi_uvc_filled(sid_file, src_res=10000, h=24*60*60, factor=1, **kwargs):
     u =  u * factor * h / src_res # pix
     v = -v * factor * h / src_res # pix
 
-    return u, v, c/100.
+    return u, v, c
 
 def get_osi_date(osi_file):
     ''' Get date of OSISAF file '''
@@ -179,7 +241,7 @@ def reproject_ice(d0, d1, ice0, eResampleAlg=0):
     return n[1]
 
 def propagate_fowler(i_start, i_end, ifiles, reader, get_date, odir,
-                     savexy=False, **kwargs):
+                     savexy=False, min_ice=0.15, **kwargs):
     ''' Apply NSIDC algorithm for ice age 
     Input:
         i0, index of file to start from
@@ -196,11 +258,14 @@ def propagate_fowler(i_start, i_end, ifiles, reader, get_date, odir,
     rnd = lambda x: np.round(x).astype(int)
     # read initial conditions
     u, v, c = reader(ifiles[i_start], **kwargs)
+    u[c < min_ice] = np.nan
+    v[c < min_ice] = np.nan
+    
     d0 = get_date(ifiles[i_start])
 
     # save initiation day YYYY.WW-YYYY.WW
     ice0 = np.zeros(c.shape) + np.nan
-    ice0[c > 0] = 1
+    ice0[c > min_ice] = 1
     ofile = '%s/icemap_%s_%s.npz' % (odir,
                         d0.strftime('%Y-%m-%d'),
                         d0.strftime('%Y-%m-%d'))
@@ -228,6 +293,9 @@ def propagate_fowler(i_start, i_end, ifiles, reader, get_date, odir,
 
         ice = np.zeros(u.shape) + np.nan
         u, v, c = reader(ifile, **kwargs)
+        u[c < min_ice] = np.nan
+        v[c < min_ice] = np.nan
+
         d = get_date(ifile)
         ice[c > 0] = 0        
         ice[rnd(rows[gpi]), rnd(cols[gpi])] = 1
@@ -246,7 +314,7 @@ def get_icemap_dates(icemap_file):
     return d0, d1
 
 def propagate_nersc(i_start, i_end, ifiles, reader, get_date, odir, 
-                    conc=False, min_flux=0, **kwargs):
+                    conc=False, min_conc=0.15, **kwargs):
     ''' Apply NERSC algorithm for ice age 
     Input:
         i_start, index of file to start from
@@ -254,13 +322,13 @@ def propagate_nersc(i_start, i_end, ifiles, reader, get_date, odir,
         ifiles: list of files with U,V,C
         reader: function to read U,V,C from input file
         get_date: function to read date from input file
-        src_res: spatial resolution (m)
-        factor: zoom factor
-        h: time step (sec)
         odir: output directory
+        conc: Use concentration? (or extent)
+        min_conc: Threshold for extent)
     Output:
         None. Files with sea ice age.
     '''
+    #import ipdb; ipdb.set_trace()
     # get initial ice mask and drift
     u0, v0, c0 = reader(ifiles[i_start], **kwargs)
     #import ipdb; ipdb.set_trace()
@@ -274,7 +342,7 @@ def propagate_nersc(i_start, i_end, ifiles, reader, get_date, odir,
         ice0 = c0
     else:
         ice0 = np.zeros(c0.shape) # water is zero years old
-        ice0[c0 > 0] = 1 # on 15 September all ice is 1 year old
+        ice0[c0 > min_conc] = 1 # on 15 September all ice is 1 year old
     
     # reduce initial concentration by concentrations of older ice
     for ice0file in ice0files:
@@ -285,7 +353,6 @@ def propagate_nersc(i_start, i_end, ifiles, reader, get_date, odir,
             ice0 -= ice0prev
 
     # fix negative concentration
-    #ice0[f0 <= 0] = 0
     ice0[ice0 < 0] = 0
 
     # save initiation day YYYY.WW-YYYY.WW
@@ -300,6 +367,7 @@ def propagate_nersc(i_start, i_end, ifiles, reader, get_date, odir,
     # loop over files with ice drift
     for i in range(i_start, i_end):
         d1 = get_date(ifiles[i+1])
+        
         ofile = '%s/icemap_%s_%s.npz' % (odir,
                             d0.strftime('%Y-%m-%d'),
                             d1.strftime('%Y-%m-%d'))
@@ -312,7 +380,14 @@ def propagate_nersc(i_start, i_end, ifiles, reader, get_date, odir,
         # read U,V,C,T
         dc, dr, c = reader(ifiles[i], **kwargs)
         d = get_date(ifiles[i])
+        # also read destination concentration
+        _, _, c1 = reader(ifiles[i+1], **kwargs)
 
+        # eraze speeds outside ice extent when concentration is not used
+        if not conc:
+            dc[c < min_conc] = np.nan
+            dr[c < min_conc] = np.nan
+            
         # increment of coordinates
         #dc = u * h / res
         #dr = - v * h / res
@@ -353,10 +428,6 @@ def propagate_nersc(i_start, i_end, ifiles, reader, get_date, odir,
         ice1ba = sba * ice0
         ice1bb = sbb * ice0
         
-        # allow only substantial enough flux
-        #for ice1flux in [ice1aa, ice1ab, ice1ba, ice1bb]:
-        #    ice1flux[ice1flux < min_flux] = 0
-
         # find valid donor pixels
         gpi = np.isfinite(cols1) * np.isfinite(rows1)
         ice1 = np.zeros_like(ice0)
@@ -403,7 +474,7 @@ def propagate_nersc(i_start, i_end, ifiles, reader, get_date, odir,
         
         # use SIC
         if conc:
-            ice_conc = c
+            ice_conc = c1
         else:
             ice_conc = np.ones_like(sum_prev_ice1)
 
@@ -452,9 +523,8 @@ def vis_drift_npz(idir, odir):
 def get_mean_age(idir, thedate, ice_mask):
     ''' Compute weighted average of fractional ice age '''
     rfiles = sorted(glob.glob(idir + '*%s.npz' % thedate.strftime('%Y-%m-%d')), reverse=True)
-    age0 = np.load(rfiles[0])['ice']
-    ice_age_sum = np.zeros(age0.shape)
-    ice_age_wsum = np.zeros(age0.shape)
+    ice_age_sum = np.zeros(ice_mask.shape)
+    ice_age_wsum = np.zeros(ice_mask.shape)
     ice_age_weights = []
     theage = 2
     for rfile in rfiles:
@@ -528,22 +598,21 @@ def save_max_age(idir, sia_factor, vmin=0, vmax=8):
         plt.imsave('%s/sia_%05d.png' % (odir, k), sia, cmap='jet', vmin=vmin, vmax=vmax)
         k += 1
 
-def save_mean_age(sid_files, icemap_dir, reader, get_date, vmin=0, vmax=5, **kwargs):
+def save_mean_age(sid_files, icemap_dir, reader, get_date, force=False, **kwargs):
     ''' Use NERSC method to compute SIA and ice fractions '''
     odir = icemap_dir + 'sia/'
     if not os.path.exists(odir):
         os.makedirs(odir)
 
-    k = 0
     for sid_file in sid_files:
-        u,v,c = reader(sid_file, **kwargs)
         d = get_date(sid_file)
+        ofile = '%s/%s_sia.npz' % (odir, d.strftime('%Y-%m-%d'))
+        if os.path.exists(ofile) and not force:
+            continue
+        u,v,c = reader(sid_file, **kwargs)
         print d
         sif, sia, myi = get_mean_age(icemap_dir, d, c)
-        ofile = '%s/%s_sia.npz' % (odir, d.strftime('%Y-%m-%d'))
         np.savez_compressed(ofile, sia=sia, sif=sif, myi=myi)
-        plt.imsave('%s/sia_%05d.png' % (odir, k), sia, cmap='jet', vmin=vmin, vmax=vmax)
-        k += 1
                     
 def make_map(ifile, prod, src_dom, dst_dom, array=None,
              vmin=0, vmax=5, dpi=250, cmap='jet',
@@ -568,20 +637,27 @@ def make_map(ifile, prod, src_dom, dst_dom, array=None,
     return nmap
 
 def save_legend(cmap, bounds, label, filename, format='%1i'):
+    fig = plt.figure(figsize=(8, 1))
+    ax = fig.add_axes([0.05, 0.5, 0.9, 0.3])
+
     # colorbar for SIA
     cmap = plt.get_cmap(cmap)
     cmaplist = [cmap(i) for i in range(cmap.N)]
-    cmap = cmap.from_list('Custom cmap', cmaplist, cmap.N)
     norm = mpl.colors.BoundaryNorm(bounds, cmap.N)
-    fig = plt.figure(figsize=(8, 1))
-    ax2 = fig.add_axes([0.05, 0.5, 0.9, 0.3])
-    cb = mpl.colorbar.ColorbarBase(ax2,
-        cmap=cmap, norm=norm, spacing='proportional', ticks=bounds,
-        boundaries=bounds, format=format, orientation='horizontal')
+    if hasattr(cmap, 'from_list'):
+        cmap = cmap.from_list('Custom cmap', cmaplist, cmap.N)
+        cb = mpl.colorbar.ColorbarBase(ax,
+            cmap=cmap, norm=norm, spacing='proportional', ticks=bounds,
+            boundaries=bounds, format=format, orientation='horizontal')
+    else:
+        cb = mpl.colorbar.ColorbarBase(ax,
+            cmap=cmap, norm=norm, orientation='horizontal')
+        
     cb.set_label(label, size=12)
     plt.savefig(filename, dpi=150, bbox_inches='tight', pad_inches=0)
     plt.close()
 
+                                
 def get_nsidc_raw_sia(ifile):
     nsidc_age = np.fromfile(ifile, np.uint8).reshape(361*2,361*2).astype(np.float32)
     nsidc_age[maximum_filter(nsidc_age, 3)==255] = np.nan

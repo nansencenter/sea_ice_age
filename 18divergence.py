@@ -12,10 +12,8 @@ from scipy.ndimage.filters import median_filter
 from nansat import *
 
 from iceagelib import *
-RES = 62500.
-RES = 31250.0  # twice high resolution
-#RES = 15625.0  # four high resolution
 
+RES = None
 def gradient2units(grd):
     return grd / RES
 
@@ -37,12 +35,7 @@ def get_divergence_shear(u, v):
     diver, shear, defor = map(defor2units, [diver, shear, defor])
     return diver, shear, defor
 
-def nan_median_filter(arr, size):
-    arr_fil = fill_gaps_nn(arr, size)
-    arr_med = median_filter(arr_fil, size)
-    arr_med[np.isnan(arr)] = np.nan
-    return arr_med
-    
+  
 def nan_bilateral_filter(arr, size=3, s0=4, s1=1):
     print 'fill_gaps_nn'
     arr_fil = fill_gaps_nn(arr, size)
@@ -80,54 +73,66 @@ xOff, yOff, xSize, ySize = 40, 120, 120, 120 # twice high resolution
 
 # OSISAF ICE DRIFT
 osi_nsr = NSR('+proj=stere +a=6378273 +b=6356889.44891 +lat_0=90 +lat_ts=70 +lon_0=-45')
-sid_dom = Domain(osi_nsr, '-te -3781250 -5281250 3656250 5781250 -tr %d %d' % (RES, RES))
-sid_n = Nansat(domain=sid_dom, array=np.ones(sid_dom.shape()))
-sid_n.crop(xOff, yOff, xSize, ySize)
+sid_dom = Domain(osi_nsr, '-te -3781250 -5281250 3656250 5781250 -tr 62500 62500')
+sid_dom2x = Domain(osi_nsr, '-te -3781250 -5281250 3656250 5781250 -tr 31250 31250')
+
+# OSISAF ICE CONC
+osi_nsr = NSR('+proj=stere +a=6378273 +b=6356889.44891 +lat_0=90 +lat_ts=70 +lon_0=-45')
+sic_dom = Domain(osi_nsr, '-te -3850000 -5350000 3750000 5850000 -tr 10000 10000')
+
+RES = 10000
 
 start = 100
 stop = 200
+step = 5
 ## U/V files
-sid_files = sorted(glob.glob(sid_dir + 'ice_drift_nh_polstere-625_multi-oi_201[2,3,4,5,6,7]*.nc'))[start:stop]
+sid_files = sorted(glob.glob(sid_dir + 'ice_drift_nh_polstere-625_multi-oi_201[2,3,4,5,6,7]*.nc'))[start:stop:step]
 
-trn = 60
+trn = 300
 
 spd_all = []
 spd_med_all = []
 for i, sid_file in enumerate(sid_files):
-    #if i != 42: continue
     date = os.path.splitext(sid_file)[0].split('-')[-1][:8]
     print date
-    u, v, f = get_osi_uvf(sid_file)
-    
-    u = zoom_nan(u, 2) # twice high resolution
-    v = zoom_nan(v, 2) # twice high resolution
-    #u = zoom_nan(u, 4) # four high resolution
-    #v = zoom_nan(v, 4) # four high resolution
-    
-    u = u[yOff:yOff+ySize, xOff:xOff+xSize]
-    v = v[yOff:yOff+ySize, xOff:xOff+xSize]
-    namestr = ''
-    spd_all.append(np.hypot(u,v)[np.isfinite(u)])
+    ### REGULAR WAY
+    uRaw, vRaw, fRaw = get_osi_uvf(sid_file)
+
+    u = reproject_ice(sid_dom, sic_dom, uRaw)
+    v = reproject_ice(sid_dom, sic_dom, vRaw)
+
+    u = nangaussian_filter(u, 2)
+    v = nangaussian_filter(v, 2)
 
     diver, shear, defor = get_divergence_shear(u, v)
     trn0_def = defor[:, trn]
     trn0_u = u[:, trn]
     trn0_v = v[:, trn]
-        
+
+    ### APPLY MEDIAN FILTER
+    # zoom2_median07_repro2x0_gaussian2
+    #"""
+    u = zoom_nan(uRaw, 2) # twice high resolution
+    v = zoom_nan(vRaw, 2) # twice high resolution
     u = nan_median_filter(u, 7)
     v = nan_median_filter(v, 7)
-    namestr = '_med'
-    spd_med_all.append(np.hypot(u,v)[np.isfinite(u)])
+    u = reproject_ice(sid_dom2x, sic_dom, u, 0)
+    v = reproject_ice(sid_dom2x, sic_dom, v, 0)
+    u = nangaussian_filter(u, 2)
+    v = nangaussian_filter(v, 2)
+    #"""
 
-    #u = nan_bilateral_filter(u, 3)
-    #v = nan_bilateral_filter(v, 3)
-    
-    #u1, v1 = zoom_med(u, v)
-    #u2, v2 = zoom_med(u1, v1)
-    #namestr = '_med'
-    
+    # zoom2_median07_repro2x1
+    """
+    u = zoom_nan(uRaw, 2)
+    v = zoom_nan(vRaw, 2)
+    u = nan_median_filter(u, 7)
+    v = nan_median_filter(v, 7)
+    u = reproject_ice(sid_dom2x, sic_dom, u, 1)
+    v = reproject_ice(sid_dom2x, sic_dom, v, 1)
+    #"""
+
     diver, shear, defor = get_divergence_shear(u, v)
-
     trn1_def = defor[:, trn]
     trn1_u = u[:, trn]
     trn1_v = v[:, trn]
@@ -137,57 +142,25 @@ for i, sid_file in enumerate(sid_files):
     fig, ax1 = plt.subplots()
     ax1.plot(x, trn1_u, 'k-')
     ax1.plot(x[::2], trn0_u[::2], 'r.')
-    ax1.set_ylim([-0.15, 0.5])
+    ax1.set_ylim([-0.2, 0.5])
     ax1.set_ylabel('velocity, m/s', color='r')
     ax2 = ax1.twinx()
     ax2.plot(x, trn1_def, 'k-', label='smoothed')
     ax2.plot(x[::2], trn0_def[::2], 'b.', label='original')
     ax2.set_ylim([-14, 14])
     ax2.set_ylabel('deformation, %/day', color='b')
-    ax2.set_xlim([0, 80])
+    ax2.set_xlim([400, 600])
     plt.legend()
     #plt.show()
-    #raise
     plt.savefig('transect_%0003d.png' % i)
     plt.close()
-    """
+    #"""
     
-    """
-    nmap = Nansatmap(sid_n)
+    #"""
+    nmap = Nansatmap(sic_dom)
     nmap.imshow(defor, cmap=cm.tempo, vmin=0, vmax=10)
-    nmap.quiver(u, v, step=4)
-    nmap.add_colorbar(shrink=0.5, fontsize=10, format='%d')
-    plt.text(2200000, 500000, date)
-    nmap.save('divergence%s_%0003d.png' % (namestr, i), dpi=150)
-    """
-
-"""
-for ifile in sorted(glob.glob('divergence%s_???.png' % namestr)):
-    print ifile
-    a = plt.imread(ifile)
-    a = a[0:(a.shape[0]/2)*2, 0:(a.shape[1]/2)*2, :]
-    plt.imsave(ifile, a)
-#avconv -y -r 4 -i divergence_med_%0003d.png -r 25 -c:v libx264 -crf 20  -pix_fmt yuv420p -b 5000 divergence_med.mov
-"""
-"""
-ifiles = sorted(glob.glob('/files/sea_ice_age/divergence/res62500/*.png'))
-idirs = ['/files/sea_ice_age/divergence/' + wdir for wdir in
-        ['res62500/', 'res62500/', 'res31250/', 'res15625_med20/']]
-
-for ifile in ifiles:
-    filename = os.path.basename(ifile)
-    print filename
-    call(['montage', idirs[0]+filename,
-                     idirs[1]+filename.replace('_', '_med_'),
-                     idirs[2]+filename.replace('_', '_med_'),
-                     idirs[3]+filename.replace('_', '_med_'),
-                     '-tile', '2x2', '-geometry', '+0+0', filename])
-"""
-spd_all = np.hstack(spd_all)
-spd_med_all = np.hstack(spd_med_all)
-plt.hist(np.log10(spd_all), 100, label='original')
-plt.hist(np.log10(spd_med_all), 100, alpha=0.5, label='smoothed')
-plt.legend()
-plt.xlabel('LOG10[speed, m/s]')
-plt.savefig('smoothed_speed_distribution.png', dpi=150)
-plt.close('all')
+    nmap.quiver(u, v, step=10)
+    #nmap.add_colorbar(shrink=0.5, fontsize=10, format='%d')
+    #plt.text(2200000, 500000, date)
+    nmap.save('divergence_%0003d.png' % i, dpi=300)
+    #"""
