@@ -35,7 +35,7 @@ days = [1, 15, 15, 15, 15]
 #months = [9, 9]
 #days = [15, 15]
 
-i_end = get_osi_i_of_file(2017, 03, 29, osi_sid_files)
+i_end = get_osi_i_of_file(2017, 9, 29, osi_sid_files)
 
 #conc = False
 #odir = '/files/sea_ice_age/nersc_osi_fv2_2017/'

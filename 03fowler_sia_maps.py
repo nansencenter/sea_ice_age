@@ -40,14 +40,14 @@ raise
 
 
 ## FOWLER OSI
-save_max_age('/files/sea_ice_age/fowler_osi_fv2/', 1)
+save_max_age('/files/sea_ice_age/fowler_osi_fv4/', 1)
 
 # source domain
 osi_nsr = NSR('+proj=stere +a=6378273 +b=6356889.44891 +lat_0=90 +lat_ts=70 +lon_0=-45')
 osi_sic_dom = Domain(osi_nsr, '-te -3850000 -5350000 3750000 5850000 -tr 10000 10000')
 
 prod = 'sia'
-idir = '/files/sea_ice_age/fowler_osi_fv1/sia/'
+idir = '/files/sea_ice_age/fowler_osi_fv4/sia/'
 
 ifiles = sorted(glob.glob(idir + '2015-12*.npz'))
 [make_map(ifile, prod, osi_sic_dom, dst_dom) for ifile in ifiles]

@@ -46,7 +46,8 @@ make_map(sia_dir + '2014-03-01_sia.npz',
          'sia', osi_sic_dom, dst_dom, title='SIA',
          vmin=1, vmax=3, cmap=sia_cmap, text='$E$', water=water)
 
-save_legend(sia_cmap, np.linspace(1.,3.,11.), 'Sea Ice Age, years', 'figure_07B_sia_legend.png', format='%2.1f')
+#save_legend(cmap, np.linspace(0.75,vmax+0.25,19.), 'Sea Ice Age, years', 'figure_08_sia_legend.png', format='%2.1f', extend='both')
+save_legend(sia_cmap, np.linspace(0.75,3.25,11.), 'Sea Ice Age, years', 'figure_07B_sia_legend.png', format='%2.1f', extend='both')
 
 """
 !montage\

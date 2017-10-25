@@ -26,7 +26,8 @@ dst_dom = Domain(dst_nsr, '-te -2000000 -2400000 2000000 2600000 -tr 10000 10000
 age_range = range(10)
 
 ### NSIDC
-"""
+#"""
+landmask = np.load('landmask.npz')['landmask']
 # source domain
 nsidc_nsr = NSR('+proj=laea +datum=WGS84 +ellps=WGS84 +lat_0=90 +lon_0=0 +no_defs')
 nsidc_sia_dom = Domain(nsidc_nsr, '-te -4512500 -4512500 4512500 4512500 -tr 12500 12500')
@@ -39,11 +40,12 @@ nsidc_age_list = []
 for nsidc_file in nsidc_files:
     print os.path.basename(nsidc_file)
     sia = reproject_ice(nsidc_sia_dom, dst_dom, get_nsidc_raw_sia(nsidc_file))
+    sia[landmask] = np.nan
     nsidc_age_list.append(sia)
 
 ### USE the MOST CRUDE LANDMASK from NSIDC
-landmask = np.isnan(sia)
-np.savez('landmask', landmask=landmask)
+#landmask = np.isnan(sia)
+#np.savez('landmask', landmask=landmask)
 
 
 nsidc_age_list = np.array(nsidc_age_list)
@@ -54,7 +56,8 @@ for age in age_range:
     nsidc_age_area.append((nsidc_age_list == age).sum(axis=(1,2)))
 nsidc_age_area = np.array(nsidc_age_area)
 np.savez('nsidc_age_area', nsidc_age_area=nsidc_age_area, nsidc_dates=nsidc_dates)
-"""
+#"""
+
 
 # NERSC
 """
@@ -62,7 +65,7 @@ osi_nsr = NSR('+proj=stere +a=6378273 +b=6356889.44891 +lat_0=90 +lat_ts=70 +lon
 osi_sic_dom = Domain(osi_nsr, '-te -3850000 -5350000 3750000 5850000 -tr 10000 10000')
 landmask = np.load('landmask.npz')['landmask']
 
-nersc_sia_files = sorted(glob.glob('/files/sea_ice_age/nersc_osi_fv2_2017_conc/sia/201[2,3,4,5,6,7]*_sia.npz'))
+nersc_sia_files = sorted(glob.glob('/files/sea_ice_age/nersc_osi_fv4_2017_conc/sia/201[2,3,4,5,6,7]*_sia.npz'))
 nersc_age_area = []
 nersc_dates = []
 for nersc_sia_file in nersc_sia_files:
@@ -113,6 +116,7 @@ for brem_file in brem_files:
     brem_myi_areas.append(np.nansum(brem_myi_pro/100.))
 brem_myi_areas = np.array(brem_myi_areas)
 np.savez('brem_myi_areas.npz', brem_myi_areas=brem_myi_areas, brem_dates=brem_dates)
+raise
 #"""
 
 
@@ -148,6 +152,7 @@ for osi_date in osi_dates_tmp:
 osi_doys = np.array([(d0- dt.datetime(d0.year,1,1)).days for d0 in osi_dates])
 osi_gpi = (osi_doys > 258) + (osi_doys < 135)
 np.savez('osi_myi_areas.npz', osi_myi_areas=osi_myi_areas, osi_dates=osi_dates, osi_gpi=osi_gpi)
+raise
 #"""
 
 
@@ -196,5 +201,5 @@ plt.xlim([dt.datetime(2013,1,1), dt.datetime(2016,1,1)])
 plt.xlabel('Date')
 
 plt.tight_layout(pad=0)
-plt.savefig('figure_10_sia_components_ts.png', dpi=300, )
+plt.savefig('figure_10_sia_components_ts_fv4.png', dpi=300, )
 plt.close('all')

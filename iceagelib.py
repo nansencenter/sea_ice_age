@@ -617,7 +617,7 @@ def save_mean_age(sid_files, icemap_dir, reader, get_date, force=False, **kwargs
 def make_map(ifile, prod, src_dom, dst_dom, array=None,
              vmin=0, vmax=5, dpi=250, cmap='jet',
              title=None, text=None, textx=100000, texty=5000000, fontsize=18,
-             water=None):
+             water=None, outline=None):
     ''' Make map with a product '''
     if array is None:
         sia = np.load(ifile)[prod]
@@ -626,17 +626,18 @@ def make_map(ifile, prod, src_dom, dst_dom, array=None,
     sia_pro = reproject_ice(src_dom, dst_dom, sia)
     nmap = Nansatmap(dst_dom, resolution='l')
     if water is not None:
-        wat_pro = reproject_ice(src_dom, dst_dom, water)
-        sia_pro[wat_pro > 0] = np.nan
+        sia_pro[water > 0] = np.nan
     nmap.imshow(sia_pro, vmin=vmin, vmax=vmax, cmap=cmap)
     if title is not None:
         plt.title(title, fontsize=fontsize)
     if text is not None:
         plt.text(textx, texty, text, fontsize=fontsize, va='top', bbox=dict(facecolor='white', alpha=0.9))
+    if outline is not None:
+        nmap.imshow(outline, vmin=-10, vmax=0, cmap='bwr')
     nmap.save('%s_%s.png' % (ifile, prod), dpi=dpi)
     return nmap
 
-def save_legend(cmap, bounds, label, filename, format='%1i'):
+def save_legend(cmap, bounds, label, filename, format='%1i', orientation='horizontal', extend='neither', spacing='uniform', extendfrac='auto'):
     fig = plt.figure(figsize=(8, 1))
     ax = fig.add_axes([0.05, 0.5, 0.9, 0.3])
 
@@ -647,11 +648,11 @@ def save_legend(cmap, bounds, label, filename, format='%1i'):
     if hasattr(cmap, 'from_list'):
         cmap = cmap.from_list('Custom cmap', cmaplist, cmap.N)
         cb = mpl.colorbar.ColorbarBase(ax,
-            cmap=cmap, norm=norm, spacing='proportional', ticks=bounds,
-            boundaries=bounds, format=format, orientation='horizontal')
+            cmap=cmap, norm=norm, spacing=spacing, ticks=bounds,
+            boundaries=bounds, format=format, orientation=orientation, extend=extend, extendfrac=extendfrac)
     else:
         cb = mpl.colorbar.ColorbarBase(ax,
-            cmap=cmap, norm=norm, orientation='horizontal')
+            cmap=cmap, norm=norm, orientation=orientation, spacing=spacing, extendfrac=extendfrac)
         
     cb.set_label(label, size=12)
     plt.savefig(filename, dpi=150, bbox_inches='tight', pad_inches=0)
@@ -664,3 +665,13 @@ def get_nsidc_raw_sia(ifile):
     nsidc_age /= 5.
 
     return nsidc_age
+
+def fill_gap_sic(sic_dir, dateA, dateB, dateC):
+    fileC = glob.glob(sic_dir + 'ice_conc*%s????.grb' % str(dateC))[0]
+    fileC_npz = fileC + '.npz'
+    if not os.path.exists(fileC_npz):
+        cA = get_osi_sic(sic_dir, parse(str(dateA)), force_grb=True)
+        cB = get_osi_sic(sic_dir, parse(str(dateB)), force_grb=True)
+        
+        cC = ((cA + cB) / 2)
+        np.savez_compressed(fileC_npz, c=cC)

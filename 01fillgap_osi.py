@@ -12,16 +12,6 @@ from nansat import *
 
 from iceagelib import *
 
-def fill_gap_sic(sic_dir, dateA, dateB, dateC):
-    fileC = glob.glob(sic_dir + 'ice_conc*%s????.grb' % str(dateC))[0]
-    fileC_npz = fileC + '.npz'
-    if not os.path.exists(fileC_npz):
-        cA = get_osi_sic(sic_dir, parse(str(dateA)), force_grb=True)
-        cB = get_osi_sic(sic_dir, parse(str(dateB)), force_grb=True)
-        
-        cC = ((cA + cB) / 2)
-        np.savez_compressed(fileC_npz, c=cC)
-
 ## FILL GAPS IN OSI-SAF SEA ICE DRIFT
 
 # get sea ice concentration
@@ -45,6 +35,10 @@ fill_func = fill_med_osi_uv_2
 odir = '/files/sea_ice_age/osi405c_demo_archive_filled_v4/'
 med=5
 
+fill_func = fill_med_osi_uv_2
+odir = '/files/sea_ice_age/osi405c_demo_archive_filled_v5/'
+med=5
+
 # OSISAF ICE CONC
 osi_nsr = NSR('+proj=stere +a=6378273 +b=6356889.44891 +lat_0=90 +lat_ts=70 +lon_0=-45')
 sic_dom = Domain(osi_nsr, '-te -3850000 -5350000 3750000 5850000 -tr 10000 10000')
@@ -61,20 +55,22 @@ stop = None
 save_first = True
 force_grb = False
 glob_mask = '201[2,3,4,5,6,7]*'
+glob_mask = '201[2,3]*'
+
+# reprocess remaining
+#start = 0
+#stop = None
+#save_first = False
+#force_grb = True
+#glob_mask = '20170[3,4,5,6,7,8,9]*'
 
 # reprocess a gap
 #start = 25
 #stop = 35
 #save_first = False
 #force_grb = True
-#glob_mask = '20160[7,8]*'
+#glob_mask = '20170[3,4]*'
 
-# reprocess remaining
-start = 20
-stop = None
-save_first = False
-force_grb = False
-glob_mask = '20170[3,4,5,6,7,8,9]*'
 
 
 # U/V files
@@ -127,9 +123,11 @@ for i, sid_file in enumerate(sid_files):
 
 #"""
 for sid_file in sid_files:
-    ofiles = sid_file.replace(sid_dir, odir)+'.npz'
+    ofile = sid_file.replace(sid_dir, odir)+'.npz'
     pngfile1 = odir + 'png/' + os.path.basename(ofile)+'_spd.png'
     pngfile2 = odir + 'png/sic/' + os.path.basename(ofile)+'_sic.png'
+    if not os.path.exists(ofile):
+        continue
     print 'PNG:', os.path.basename(ofile)
     u = np.load(ofile)['u']
     v = np.load(ofile)['u']
