@@ -194,7 +194,7 @@ def fill_med_osi_uv(u, v, c, sid_dom_x, sic_dom, zf=2, med=7, nn_dst=5, **kwargs
 
     return uv_pro[0], uv_pro[1], c
 
-def fill_med_osi_uv_2(u, v, c, sid_dom_x, sic_dom, uvf0=None, zf=2, med=7, nn_dst=5, **kwargs):
+def fill_med_osi_uv_2(u, v, c, sid_dom_x, sic_dom, uvf0=None, zf=2, med=7, min_conc=0):
     ''' Median filter, resample and fill gaps in UV data using C and previous UV'''
     uv_pro = []
     uvf1 = []
@@ -213,7 +213,7 @@ def fill_med_osi_uv_2(u, v, c, sid_dom_x, sic_dom, uvf0=None, zf=2, med=7, nn_ds
         # upscale U,V to the grid of C
         uvp = reproject_ice(sid_dom_x, sic_dom, uvm, 2)
         # replace WATER pixels with NAN
-        uvp[c == 0] = np.nan
+        uvp[c < min_conc] = np.nan
         # replace LAND pixels with NAN
         uvp[np.isnan(c)] = np.nan
         uv_pro.append(uvp)
@@ -314,7 +314,7 @@ def get_icemap_dates(icemap_file):
     return d0, d1
 
 def propagate_nersc(i_start, i_end, ifiles, reader, get_date, odir, 
-                    conc=False, min_conc=0.15, **kwargs):
+                    conc=False, min_conc=0.15, c0=None, **kwargs):
     ''' Apply NERSC algorithm for ice age 
     Input:
         i_start, index of file to start from
@@ -328,10 +328,9 @@ def propagate_nersc(i_start, i_end, ifiles, reader, get_date, odir,
     Output:
         None. Files with sea ice age.
     '''
-    #import ipdb; ipdb.set_trace()
     # get initial ice mask and drift
-    u0, v0, c0 = reader(ifiles[i_start], **kwargs)
-    #import ipdb; ipdb.set_trace()
+    if c0 is None:
+        u0, v0, c0 = reader(ifiles[i_start], **kwargs)
     d0 = get_date(ifiles[i_start])
     
     # find files with ice age produced from previous years
@@ -362,7 +361,7 @@ def propagate_nersc(i_start, i_end, ifiles, reader, get_date, odir,
     np.savez_compressed(ofile, ice=ice0)
     
     # initial coordinates of each pixel
-    cols0, rows0 = np.meshgrid(range(u0.shape[1]), range(u0.shape[0]))
+    cols0, rows0 = np.meshgrid(range(c0.shape[1]), range(c0.shape[0]))
     k = 0
     # loop over files with ice drift
     for i in range(i_start, i_end):

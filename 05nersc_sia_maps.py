@@ -42,15 +42,15 @@ for ifile in ifiles:
 #"""
 
 ### OSI U/V
-osi_sid_dir = '/files/sea_ice_age/osi405c_demo_archive_filled_v4/'
-osi_sia_dir = '/files/sea_ice_age/nersc_osi_fv4_2017_conc/'
+osi_sid_dir = '/files/sea_ice_age/osi405c_demo_archive_filled_v5/'
+osi_sia_dir = '/files/sea_ice_age/nersc_osi_fv5_2017/'
 reader = get_osi_uvc_filled
 get_date = get_osi_date
 # source domain
 osi_nsr = NSR('+proj=stere +a=6378273 +b=6356889.44891 +lat_0=90 +lat_ts=70 +lon_0=-45')
 osi_sic_dom = Domain(osi_nsr, '-te -3850000 -5350000 3750000 5850000 -tr 10000 10000')
 
-for yy in [2016, 2017]:
+for yy in [2012, 2013, 2014, 2015, 2016, 2017]:
     # save mean age
     osi_sid_files = sorted(glob.glob(osi_sid_dir + '*_%d*.npz' % yy))
     save_mean_age(osi_sid_files, osi_sia_dir, reader, get_date)

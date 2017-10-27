@@ -26,7 +26,7 @@ dst_dom = Domain(dst_nsr, '-te -2000000 -2400000 2000000 2600000 -tr 10000 10000
 age_range = range(10)
 
 ### NSIDC
-#"""
+"""
 landmask = np.load('landmask.npz')['landmask']
 # source domain
 nsidc_nsr = NSR('+proj=laea +datum=WGS84 +ellps=WGS84 +lat_0=90 +lon_0=0 +no_defs')
@@ -60,12 +60,12 @@ np.savez('nsidc_age_area', nsidc_age_area=nsidc_age_area, nsidc_dates=nsidc_date
 
 
 # NERSC
-"""
+#"""
 osi_nsr = NSR('+proj=stere +a=6378273 +b=6356889.44891 +lat_0=90 +lat_ts=70 +lon_0=-45')
 osi_sic_dom = Domain(osi_nsr, '-te -3850000 -5350000 3750000 5850000 -tr 10000 10000')
 landmask = np.load('landmask.npz')['landmask']
 
-nersc_sia_files = sorted(glob.glob('/files/sea_ice_age/nersc_osi_fv4_2017_conc/sia/201[2,3,4,5,6,7]*_sia.npz'))
+nersc_sia_files = sorted(glob.glob('/files/sea_ice_age/nersc_osi_fv5_2017_conc/sia/201[2,3,4,5,6,7]*_sia.npz'))
 nersc_age_area = []
 nersc_dates = []
 for nersc_sia_file in nersc_sia_files:
@@ -201,5 +201,5 @@ plt.xlim([dt.datetime(2013,1,1), dt.datetime(2016,1,1)])
 plt.xlabel('Date')
 
 plt.tight_layout(pad=0)
-plt.savefig('figure_10_sia_components_ts_fv4.png', dpi=300, )
+plt.savefig('figure_10_sia_components_ts_fv5.png', dpi=300, )
 plt.close('all')

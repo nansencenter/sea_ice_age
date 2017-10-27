@@ -1,6 +1,7 @@
 import os
 import glob
 import datetime as dt
+from subprocess import call
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -17,7 +18,7 @@ from cmocean import cm
 
 ### =====================
 
-idir = '/files/sea_ice_age/nersc_osi_fv2_2017_conc_repro/sia/'
+idir = '/files/sea_ice_age/nersc_osi_fv5_2017_conc/sia/'
 
 #####  FIGURE 7. Propagation
 # destination domain
@@ -55,9 +56,14 @@ make_map('tmp_2013-10-01',
           vmin=0, vmax=1, cmap=cm.ice, array=sif[2], text='E: $C_{3YI}$')
 
 
-"""
-!montage\
-    tmp_2012-10-01_2yi.png tmp_2013-01-01_2yi.png tmp_2013-04-01_2yi.png tmp_2013-07-01_2yi.png tmp_2013-10-01_3yi.png\
-    -tile 5x1 -geometry +0+0 figure_07A_sif_propagation.png 
-"""
-#save_legend(cm.ice, np.linspace(0,100,20), 'Sea Ice Age Fraction, %', 'figure_07_sif_legend.png')
+call(
+"""montage\
+   tmp_2012-10-01_2yi.png\
+   tmp_2013-01-01_2yi.png\
+   tmp_2013-04-01_2yi.png\
+   tmp_2013-07-01_2yi.png\
+   tmp_2013-10-01_3yi.png\
+   -tile 5x1 -geometry +0+0 figure_07A_sif_propagation.png"""
+, shell=True)
+
+save_legend(cm.ice, np.linspace(0,100,21), 'Sea Ice Age Fraction, %', 'figure_07A_sif_legend.png')

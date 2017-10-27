@@ -1,6 +1,7 @@
 import os
 import glob
 import datetime as dt
+from subprocess import call
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -33,10 +34,10 @@ for dst_date in [dt.datetime(2012,12,31),
                  dt.datetime(2016,12,31),
                  dt.datetime(2017,3,29)]:
     print dst_date
-    ifile = '/files/sea_ice_age/nersc_osi_fv4_2017_conc/sia/%s_sia.npz' % dst_date.strftime('%Y-%m-%d')
+    ifile = '/files/sea_ice_age/nersc_osi_fv5_2017_conc/sia/%s_sia.npz' % dst_date.strftime('%Y-%m-%d')
     myi = np.load(ifile)['myi']
     sia = np.load(ifile)['sia']
-    cfilemask = '/files/sea_ice_age/osi405c_demo_archive_filled_v4/ice_drift_nh_polstere-625_multi-oi_%s*.npz' % dst_date.strftime('%Y%m%d')
+    cfilemask = '/files/sea_ice_age/osi405c_demo_archive_filled_v5/ice_drift_nh_polstere-625_multi-oi_%s*.npz' % dst_date.strftime('%Y%m%d')
     cfile = glob.glob(cfilemask)[0]
     c = np.load(cfile)['c']
     water = reproject_ice(osi_sic_dom, dst_dom, (c <= 0.05).astype(float))
@@ -50,17 +51,16 @@ for dst_date in [dt.datetime(2012,12,31),
              vmin=0, vmax=0.85, cmap=cm.ice, text=text, water=water, outline=outline)
     text=None
 
-
-"""
-!montage\
+call("""
+montage\
     tmp_2012-12-31_nersc_myi.png\
     tmp_2013-12-31_nersc_myi.png\
     tmp_2014-12-31_nersc_myi.png\
     tmp_2015-12-31_nersc_myi.png\
     tmp_2016-12-31_nersc_myi.png\
     tmp_2017-03-29_nersc_myi.png\
-    -tile 6x1 -geometry +0+0 figure_09_myi_nersc.png 
-"""
+    -tile 6x1 -geometry +0+0 figure_09_myi_nersc.png
+""", shell=True)
 
 
 ### NSIDC
@@ -82,8 +82,9 @@ make_map('tmp_2016-12-31', 'nsidc_myi', nsidc_sia_dom, dst_dom,
          array=myi, vmin=-1, vmax=0, cmap=cm.ice, title='2016-12-31')
 make_map('tmp_2017-03-29', 'nsidc_myi', nsidc_sia_dom, dst_dom,
          array=myi, vmin=-1, vmax=0, cmap=cm.ice, title='2017-03-29')
-"""
-!montage\
+
+call("""
+montage\
     tmp_2012-12-31_nsidc_myi.png\
     tmp_2013-12-31_nsidc_myi.png\
     tmp_2014-12-31_nsidc_myi.png\
@@ -91,7 +92,7 @@ make_map('tmp_2017-03-29', 'nsidc_myi', nsidc_sia_dom, dst_dom,
     tmp_2016-12-31_nsidc_myi.png\
     tmp_2017-03-29_nsidc_myi.png\
     -tile 6x1 -geometry +0+0 figure_09_myi_nsidc.png 
-"""
+""", shell=True)
 
 
 ####============== BREMEN
@@ -117,8 +118,8 @@ for date in dates:
          array=np.ones(brem_myi.shape), vmin=-10, vmax=0, cmap=cm.ice, text=text)
     text = None
 
-"""
-!montage\
+call("""
+montage\
     tmp_2012-12-31_bremen_myi.png\
     tmp_2013-12-31_bremen_myi.png\
     tmp_2014-12-31_bremen_myi.png\
@@ -126,7 +127,7 @@ for date in dates:
     tmp_2016-12-31_bremen_myi.png\
     tmp_2017-03-29_bremen_myi.png\
     -tile 6x1 -geometry +0+0 figure_09_myi_bremen.png 
-"""
+""", shell=True)
 
 
 
@@ -163,8 +164,8 @@ for osi_date in [
              array=ice_type, vmin=2, vmax=3, cmap=cm.ice, text=text, water=water, outline=outline)
     text = None
 
-"""
-!montage\
+call("""
+montage\
     tmp_2012-12-31_osisaf_myi.png\
     tmp_2013-12-31_osisaf_myi.png\
     tmp_2014-12-31_osisaf_myi.png\
@@ -172,14 +173,15 @@ for osi_date in [
     tmp_2016-12-31_osisaf_myi.png\
     tmp_2017-03-29_osisaf_myi.png\
     -tile 6x1 -geometry +0+0 figure_09_myi_osisaf.png 
-"""
+""", shell=True)
+
 save_legend(cm.ice, np.linspace(0,85,18), 'Multi-Year Ice Concentration, %', 'figure_09_myi_legend.png', extend='max')
 
-"""
-!montage\
+call("""
+montage\
     figure_09_myi_nsidc.png\
     figure_09_myi_nersc.png\
     figure_09_myi_osisaf.png\
     figure_09_myi_bremen.png\
     -tile 1x4 -geometry +0+0 figure_09_myi.png 
-"""
+""", shell=True)

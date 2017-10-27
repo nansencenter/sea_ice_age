@@ -48,7 +48,7 @@ nsidc_myi_pro = reproject_ice(nsidc_sia_dom, mos_dom, nsidc_myi)
 # SICCI
 osi_nsr = NSR('+proj=stere +a=6378273 +b=6356889.44891 +lat_0=90 +lat_ts=70 +lon_0=-45')
 osi_sic_dom = Domain(osi_nsr, '-te -3850000 -5350000 3750000 5850000 -tr 10000 10000')
-ifile = '/files/sea_ice_age/nersc_osi_fv4_2017_conc/sia/2016-01-01_sia.npz'
+ifile = '/files/sea_ice_age/nersc_osi_fv5_2017_conc/sia/2016-01-01_sia.npz'
 sicci_myi = np.load(ifile)['myi']
 sicci_myi_pro = reproject_ice(osi_sic_dom, mos_dom, sicci_myi)
 
@@ -71,7 +71,7 @@ for seg_coords in coords:
     seg_coords = np.array(seg_coords)*1.03 + np.array([80000, 90000])
     nmap.plot(seg_coords.T[0]-minx, seg_coords.T[1]-miny, '-', color='#00ffff', linewidth=0.3)
 
-levels=[0.15, 0.5]
+levels=[0.1, 0.5]
 linewidths=[0.7, 0.3]
 nmap.contour(sicci_myi_pro, levels=levels, colors='r', linewidths=linewidths, label=False)
 #plt.contour(breme_myi_pro, levels=levels, colors='y', linewidths=linewidths)
@@ -91,5 +91,5 @@ plt.xticks([])
 plt.yticks([])
 plt.ylim([1500000, 5300000])
 plt.xlim([300000, 4000000])
-plt.savefig('figure_12_SAR_mosaic_fv4.png', pad_inches=0, bbox_inches='tight', dpi=600)
+plt.savefig('figure_12_SAR_mosaic_fv5.png', pad_inches=0, bbox_inches='tight', dpi=600)
 plt.close()

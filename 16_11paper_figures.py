@@ -96,6 +96,6 @@ plt.xticks([0.5, 3.5, 6.5, 9.5], ['2013-01-01', '2014-01-01', '2015-01-01', '201
 plt.xlabel('Years')
 plt.ylabel('Area, 10$^6$ km$^2$')
 plt.tight_layout(pad=0)
-plt.savefig('figure_11_sia_interannual_fv4.png', dpi=300, )
+plt.savefig('figure_11_sia_interannual_fv5.png', dpi=300, )
 plt.close('all')
 

@@ -1,6 +1,7 @@
 import os
 import glob
 import datetime as dt
+from subprocess import call
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -29,8 +30,8 @@ osi_sic_dom = Domain(osi_nsr, '-te -3850000 -5350000 3750000 5850000 -tr 10000 1
 nsidc_nsr = NSR('+proj=laea +datum=WGS84 +ellps=WGS84 +lat_0=90 +lon_0=0 +no_defs')
 nsidc_sia_dom = Domain(nsidc_nsr, '-te -4512500 -4512500 4512500 4512500 -tr 12500 12500')
 
-c = np.load('/files/sea_ice_age/osi405c_demo_archive_filled_v4/ice_drift_nh_polstere-625_multi-oi_201512311200-201601021200.nc.npz')['c']
-water = (c < 0.1).astype(float)
+c = np.load('/files/sea_ice_age/osi405c_demo_archive_filled_v5/ice_drift_nh_polstere-625_multi-oi_201512311200-201601021200.nc.npz')['c']
+water = reproject_ice(osi_sic_dom, dst_dom, (c <= 0.05).astype(float))
 
 make_map('/files/sea_ice_age/fowler_nsidc_2016_f02/sia/2015-12-31_sia.npz',
          'sia', nsidc_sia_dom, dst_dom,
@@ -40,20 +41,20 @@ make_map('/files/sea_ice_age/fowler_osi_fv4/sia/2015-12-31_sia.npz',
          'sia', osi_sic_dom, dst_dom,
          vmin=1, vmax=vmax, cmap=cmap, text='B')
 
-make_map('/files/sea_ice_age/nersc_osi_fv4_2017/sia/2016-01-01_sia.npz',
+make_map('/files/sea_ice_age/nersc_osi_fv5_2017/sia/2015-12-31_sia.npz',
          'sia', osi_sic_dom, dst_dom,
          vmin=1, vmax=vmax, cmap=cmap, text='C', water=water)
 
-make_map('/files/sea_ice_age/nersc_osi_fv4_2017_conc/sia/2016-01-01_sia.npz',
+make_map('/files/sea_ice_age/nersc_osi_fv5_2017_conc/sia/2015-12-31_sia.npz',
          'sia', osi_sic_dom, dst_dom,
          vmin=1, vmax=vmax, cmap=cmap, text='D', water=water)
 
-"""
-!montage\
+call("""
+montage\
  /files/sea_ice_age/fowler_nsidc_2016_f02/sia/2015-12-31_sia.npz_sia.png\
  /files/sea_ice_age/fowler_osi_fv4/sia/2015-12-31_sia.npz_sia.png\
  /files/sea_ice_age/nersc_osi_fv4_2017/sia/2016-01-01_sia.npz_sia.png\
  /files/sea_ice_age/nersc_osi_fv4_2017_conc/sia/2016-01-01_sia.npz_sia.png\
  -tile 2x2 -geometry +0+0 figure_08_sia_compar_methods.png 
-"""
+""", shell=True)
 save_legend(cmap, np.linspace(0.75,vmax+0.25,19.), 'Sea Ice Age, years', 'figure_08_sia_legend.png', format='%2.1f', extend='both')

@@ -31,13 +31,15 @@ cMin = 15
 #odir = '/files/sea_ice_age/osi405c_demo_archive_filled_v3/'
 #med=5
 
-fill_func = fill_med_osi_uv_2
-odir = '/files/sea_ice_age/osi405c_demo_archive_filled_v4/'
-med=5
+#fill_func = fill_med_osi_uv_2
+#odir = '/files/sea_ice_age/osi405c_demo_archive_filled_v4/'
+#med=5
+#min_conc = 0
 
 fill_func = fill_med_osi_uv_2
 odir = '/files/sea_ice_age/osi405c_demo_archive_filled_v5/'
 med=5
+min_conc = 0.0
 
 # OSISAF ICE CONC
 osi_nsr = NSR('+proj=stere +a=6378273 +b=6356889.44891 +lat_0=90 +lat_ts=70 +lon_0=-45')
@@ -55,7 +57,6 @@ stop = None
 save_first = True
 force_grb = False
 glob_mask = '201[2,3,4,5,6,7]*'
-glob_mask = '201[2,3]*'
 
 # reprocess remaining
 #start = 0
@@ -70,7 +71,6 @@ glob_mask = '201[2,3]*'
 #save_first = False
 #force_grb = True
 #glob_mask = '20170[3,4]*'
-
 
 
 # U/V files
@@ -112,7 +112,7 @@ for i, sid_file in enumerate(sid_files):
     u, v, f = get_osi_uvf(sid_file)
     sid_date = get_osi_date(sid_file)
     c = get_osi_sic(sic_dir, sid_date)
-    u, v, c, uvf = fill_func(u, v, c, sid_dom_x=sid_dom2x, sic_dom=sic_dom, uvf0=uvf, med=med)
+    u, v, c, uvf = fill_func(u, v, c, sid_dom_x=sid_dom2x, sic_dom=sic_dom, uvf0=uvf, med=med, min_conc=min_conc)
 
     if save_first:
         print 'Save:', i, os.path.basename(ofile)
@@ -124,10 +124,11 @@ for i, sid_file in enumerate(sid_files):
 #"""
 for sid_file in sid_files:
     ofile = sid_file.replace(sid_dir, odir)+'.npz'
-    pngfile1 = odir + 'png/' + os.path.basename(ofile)+'_spd.png'
-    pngfile2 = odir + 'png/sic/' + os.path.basename(ofile)+'_sic.png'
     if not os.path.exists(ofile):
         continue
+
+    pngfile1 = odir + 'png/' + os.path.basename(ofile)+'_spd.png'
+    pngfile2 = odir + 'png/sic/' + os.path.basename(ofile)+'_sic.png'
     print 'PNG:', os.path.basename(ofile)
     u = np.load(ofile)['u']
     v = np.load(ofile)['u']
