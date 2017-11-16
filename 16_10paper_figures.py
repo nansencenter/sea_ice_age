@@ -65,7 +65,7 @@ osi_nsr = NSR('+proj=stere +a=6378273 +b=6356889.44891 +lat_0=90 +lat_ts=70 +lon
 osi_sic_dom = Domain(osi_nsr, '-te -3850000 -5350000 3750000 5850000 -tr 10000 10000')
 landmask = np.load('landmask.npz')['landmask']
 
-nersc_sia_files = sorted(glob.glob('/files/sea_ice_age/nersc_osi_fv5_2017_conc/sia/201[2,3,4,5,6,7]*_sia.npz'))
+nersc_sia_files = sorted(glob.glob('/files/sea_ice_age/nersc_osi_fv6_2017_conc/sia/201[2,3,4,5,6,7]*_sia.npz'))
 nersc_age_area = []
 nersc_dates = []
 for nersc_sia_file in nersc_sia_files:
@@ -91,7 +91,7 @@ for nersc_sia_file in nersc_sia_files:
     
     nersc_age_area.append(age_area)
 nersc_age_area = np.array(nersc_age_area).T
-np.savez('nersc_age_area', nersc_age_area=nersc_age_area, nersc_dates=nersc_dates)
+np.savez('nersc_age_area_fv6', nersc_age_area=nersc_age_area, nersc_dates=nersc_dates)
 #"""
 
 
@@ -161,8 +161,8 @@ nsidc_age_area = np.load('nsidc_age_area.npz')['nsidc_age_area']
 nsidc_dates = np.load('nsidc_age_area.npz')['nsidc_dates']
 nsidc_age_cum_area = np.cumsum(nsidc_age_area[::-1], axis=0)[::-1]
 
-nersc_age_area = np.load('nersc_age_area.npz')['nersc_age_area']
-nersc_dates = np.load('nersc_age_area.npz')['nersc_dates']
+nersc_age_area = np.load('nersc_age_area_fv6.npz')['nersc_age_area']
+nersc_dates = np.load('nersc_age_area_fv6.npz')['nersc_dates']
 nersc_age_cum_area = np.cumsum(nersc_age_area[::-1], axis=0)[::-1]
 
 osi_myi_areas = np.load('osi_myi_areas.npz')['osi_myi_areas']
@@ -201,5 +201,5 @@ plt.xlim([dt.datetime(2013,1,1), dt.datetime(2016,1,1)])
 plt.xlabel('Date')
 
 plt.tight_layout(pad=0)
-plt.savefig('figure_10_sia_components_ts_fv5.png', dpi=300, )
+plt.savefig('figure_10_sia_components_ts_fv6.png', dpi=300, )
 plt.close('all')

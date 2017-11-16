@@ -48,7 +48,7 @@ nsidc_myi_pro = reproject_ice(nsidc_sia_dom, mos_dom, nsidc_myi)
 # SICCI
 osi_nsr = NSR('+proj=stere +a=6378273 +b=6356889.44891 +lat_0=90 +lat_ts=70 +lon_0=-45')
 osi_sic_dom = Domain(osi_nsr, '-te -3850000 -5350000 3750000 5850000 -tr 10000 10000')
-ifile = '/files/sea_ice_age/nersc_osi_fv5_2017_conc/sia/2016-01-01_sia.npz'
+ifile = '/files/sea_ice_age/nersc_osi_fv6_2017_conc/sia/2016-01-01_sia.npz'
 sicci_myi = np.load(ifile)['myi']
 sicci_myi_pro = reproject_ice(osi_sic_dom, mos_dom, sicci_myi)
 
@@ -91,5 +91,5 @@ plt.xticks([])
 plt.yticks([])
 plt.ylim([1500000, 5300000])
 plt.xlim([300000, 4000000])
-plt.savefig('figure_12_SAR_mosaic_fv5.png', pad_inches=0, bbox_inches='tight', dpi=600)
+plt.savefig('figure_12_SAR_mosaic_fv6.png', pad_inches=0, bbox_inches='tight', dpi=600)
 plt.close()

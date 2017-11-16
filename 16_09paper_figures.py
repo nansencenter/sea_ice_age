@@ -34,10 +34,10 @@ for dst_date in [dt.datetime(2012,12,31),
                  dt.datetime(2016,12,31),
                  dt.datetime(2017,3,29)]:
     print dst_date
-    ifile = '/files/sea_ice_age/nersc_osi_fv5_2017_conc/sia/%s_sia.npz' % dst_date.strftime('%Y-%m-%d')
+    ifile = '/files/sea_ice_age/nersc_osi_fv6_2017_conc/sia/%s_sia.npz' % dst_date.strftime('%Y-%m-%d')
     myi = np.load(ifile)['myi']
     sia = np.load(ifile)['sia']
-    cfilemask = '/files/sea_ice_age/osi405c_demo_archive_filled_v5/ice_drift_nh_polstere-625_multi-oi_%s*.npz' % dst_date.strftime('%Y%m%d')
+    cfilemask = '/files/sea_ice_age/osi405c_demo_archive_filled_v6/ice_drift_nh_polstere-625_multi-oi_%s*.npz' % dst_date.strftime('%Y%m%d')
     cfile = glob.glob(cfilemask)[0]
     c = np.load(cfile)['c']
     water = reproject_ice(osi_sic_dom, dst_dom, (c <= 0.05).astype(float))
@@ -112,7 +112,7 @@ for date in dates:
              array=brem_myi, vmin=0, vmax=85, cmap=cm.ice, water=water, outline=outline)
 
 dates = ['2012-12-31']
-text = 'BU'
+text = 'UB'
 for date in dates:
     make_map('tmp_%s' % date, 'bremen_myi', brem_dom, dst_dom,
          array=np.ones(brem_myi.shape), vmin=-10, vmax=0, cmap=cm.ice, text=text)
@@ -183,5 +183,5 @@ montage\
     figure_09_myi_nersc.png\
     figure_09_myi_osisaf.png\
     figure_09_myi_bremen.png\
-    -tile 1x4 -geometry +0+0 figure_09_myi.png 
+    -tile 1x4 -geometry +0+0 figure_09_myi_fv6.png 
 """, shell=True)

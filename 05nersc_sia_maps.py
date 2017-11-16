@@ -42,8 +42,8 @@ for ifile in ifiles:
 #"""
 
 ### OSI U/V
-osi_sid_dir = '/files/sea_ice_age/osi405c_demo_archive_filled_v5/'
-osi_sia_dir = '/files/sea_ice_age/nersc_osi_fv5_2017/'
+osi_sid_dir = '/files/sea_ice_age/osi405c_demo_archive_filled_v6/'
+osi_sia_dir = '/files/sea_ice_age/nersc_osi_fv6_2017_conc/'
 reader = get_osi_uvc_filled
 get_date = get_osi_date
 # source domain
@@ -66,3 +66,19 @@ for yy in [2012, 2013, 2014, 2015, 2016, 2017]:
 #make_map(ifile, 'sia', osi_sic_dom, dst_dom, vmin=0, vmax=5, cmap='jet', text=os.path.basename(ifile).split('_')[0])
 #make_map(ifile, 'myi', osi_sic_dom, dst_dom, vmin=0, vmax=1, cmap=cm.ice, text=os.path.basename(ifile).split('_')[0])
         
+"""
+sum2012 = [np.nansum(np.load(sia_file)['ice']) for sia_file in sorted(glob.glob(osi_sia_dir + 'icemap_2012*npz'))]
+sum2013 = [np.nansum(np.load(sia_file)['ice']) for sia_file in sorted(glob.glob(osi_sia_dir + 'icemap_2013*npz'))]
+sum2014 = [np.nansum(np.load(sia_file)['ice']) for sia_file in sorted(glob.glob(osi_sia_dir + 'icemap_2014*npz'))]
+sum2015 = [np.nansum(np.load(sia_file)['ice']) for sia_file in sorted(glob.glob(osi_sia_dir + 'icemap_2015*npz'))]
+sum2016 = [np.nansum(np.load(sia_file)['ice']) for sia_file in sorted(glob.glob(osi_sia_dir + 'icemap_2016*npz'))]
+
+dmin = 30
+plt.plot(sum2012[dmin:]/sum2012[dmin])
+plt.plot(sum2013[dmin:]/sum2013[dmin])
+plt.plot(sum2014[dmin:]/sum2014[dmin])
+plt.plot(sum2015[dmin:]/sum2015[dmin])
+plt.plot(sum2016[dmin:]/sum2016[dmin])
+plt.legend(['2012', '2013', '2014', '2015', '2016'])
+plt.show()
+"""

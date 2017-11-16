@@ -23,4 +23,4 @@ montage\
  /files/sea_ice_age/fowler_nsidc_1985_f08/sia/1984-12-30_sia.npz_sia.png\
  -tile 3x1 -geometry +0+0 figure_02_sia_compar_density.png 
 """
-save_legend('jet', np.linspace(1,9,9), 'Sea Ice Age, years', 'figure_02_sia_legend.png')
+save_legend('jet', np.linspace(0,9,10), 'Sea Ice Age, years', 'figure_02_sia_legend.png', extend='both')

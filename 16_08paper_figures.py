@@ -45,7 +45,7 @@ make_map('/files/sea_ice_age/nersc_osi_fv5_2017/sia/2015-12-31_sia.npz',
          'sia', osi_sic_dom, dst_dom,
          vmin=1, vmax=vmax, cmap=cmap, text='C', water=water)
 
-make_map('/files/sea_ice_age/nersc_osi_fv5_2017_conc/sia/2015-12-31_sia.npz',
+make_map('/files/sea_ice_age/nersc_osi_fv6_2017_conc/sia/2015-12-31_sia.npz',
          'sia', osi_sic_dom, dst_dom,
          vmin=1, vmax=vmax, cmap=cmap, text='D', water=water)
 
@@ -55,6 +55,6 @@ montage\
  /files/sea_ice_age/fowler_osi_fv4/sia/2015-12-31_sia.npz_sia.png\
  /files/sea_ice_age/nersc_osi_fv4_2017/sia/2016-01-01_sia.npz_sia.png\
  /files/sea_ice_age/nersc_osi_fv4_2017_conc/sia/2016-01-01_sia.npz_sia.png\
- -tile 2x2 -geometry +0+0 figure_08_sia_compar_methods.png 
+ -tile 2x2 -geometry +0+0 figure_08_sia_compar_methods_fv6.png 
 """, shell=True)
 save_legend(cmap, np.linspace(0.75,vmax+0.25,19.), 'Sea Ice Age, years', 'figure_08_sia_legend.png', format='%2.1f', extend='both')

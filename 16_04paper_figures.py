@@ -1,6 +1,7 @@
 import os
 import glob
 import datetime as dt
+from subprocess import call
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -39,13 +40,25 @@ for i, age_sum in enumerate(age_sums):
     age_frac = age_sum/age_sum_tot
     age_frac[~np.isfinite(age_frac)] = 0
     make_map('tmp_fraction_1984-12-30_%02d.npz' % i, 'age_frac', nsidc_sia_dom, dst_dom,
-          vmin=0, vmax=0.8, cmap=cm.ice, title='%dYI' % (i+2), array=age_frac)
+          vmin=0, vmax=0.75, cmap=cm.ice, title='%dYI' % (i+2), array=age_frac)
 
-"""
-!montage\
-   tmp_fraction_1984-12-30_??.npz_age_frac.png\
-   -tile 7x1 -geometry +0+0 figure_04_fowler_ice_frac.png 
-"""
-save_legend(cm.ice, np.linspace(0,80,20), 'Sea Ice Age Fraction, %', 'figure_04_sif_legend.png')
+sia = np.load(idir + 'sia/1984-12-30_sia.npz')['sia']
+make_map('tmp_fraction_1984-12-30', 'sia', nsidc_sia_dom, dst_dom,
+      vmin=1, vmax=8, cmap='jet', title='SIA', array=sia)
+
+call("""
+montage\
+    tmp_fraction_1984-12-30_00.npz_age_frac.png\
+    tmp_fraction_1984-12-30_01.npz_age_frac.png\
+    tmp_fraction_1984-12-30_02.npz_age_frac.png\
+    tmp_fraction_1984-12-30_03.npz_age_frac.png\
+    tmp_fraction_1984-12-30_04.npz_age_frac.png\
+    tmp_fraction_1984-12-30_05.npz_age_frac.png\
+    tmp_fraction_1984-12-30_06.npz_age_frac.png\
+    tmp_fraction_1984-12-30_sia.png\
+    -tile 8x1 -geometry +0+0 figure_04_fowler_ice_frac.png 
+""", shell=True)
+save_legend(cm.ice, np.linspace(0,80,17), 'Sea Ice Fraction, %', 'figure_04_sif_legend.png', extend='max')
+save_legend('jet', np.linspace(1,9,10), 'Sea Ice Age, years', 'figure_04_sia_legend.png', extend='both')
 
 

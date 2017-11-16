@@ -194,7 +194,7 @@ def fill_med_osi_uv(u, v, c, sid_dom_x, sic_dom, zf=2, med=7, nn_dst=5, **kwargs
 
     return uv_pro[0], uv_pro[1], c
 
-def fill_med_osi_uv_2(u, v, c, sid_dom_x, sic_dom, uvf0=None, zf=2, med=7, min_conc=0):
+def fill_med_osi_uv_2(u, v, c, sid_dom_x, sic_dom, uvf0=None, zf=2, footprint=np.ones((2,7,7)), min_conc=0):
     ''' Median filter, resample and fill gaps in UV data using C and previous UV'''
     uv_pro = []
     uvf1 = []
@@ -206,12 +206,13 @@ def fill_med_osi_uv_2(u, v, c, sid_dom_x, sic_dom, uvf0=None, zf=2, med=7, min_c
         uvf1.append(uvf)
         # median filter (also previous UV, if exists)
         if uvf0 is None:
-            uvm = median_filter(uvf, med)
+            uvm = median_filter(uvf, footprint=footprint[0], mode='nearest')
         else:
-            uvm = median_filter(np.dstack([uvf0[i], uvf]), (med, med, 2), mode='mirror')[:,:,0]
+            uvm = median_filter([uvf0[i], uvf], footprint=footprint, mode='nearest')[1]
         
         # upscale U,V to the grid of C
         uvp = reproject_ice(sid_dom_x, sic_dom, uvm, 2)
+        #import ipdb; ipdb.set_trace()
         # replace WATER pixels with NAN
         uvp[c < min_conc] = np.nan
         # replace LAND pixels with NAN
@@ -674,3 +675,14 @@ def fill_gap_sic(sic_dir, dateA, dateB, dateC):
         
         cC = ((cA + cB) / 2)
         np.savez_compressed(fileC_npz, c=cC)
+
+def get_c0(osi_sic_dir, yy):
+    ofile = 'c0_%04d.npy' % yy
+    if os.path.exists(ofile):
+        return np.load(ofile)
+    c = [get_osi_sic(osi_sic_dir, dt.datetime(yy,9,d)) for d in range(1,31)]
+    c = np.array(c)
+    cm = nan_median_filter(c, 5)
+    c0 = np.nanmin(cm, axis=0)
+    np.save(ofile, c0)
+    return c0

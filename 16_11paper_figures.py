@@ -31,8 +31,8 @@ dt.datetime(2016,1,1),
 nsidc_age_area = np.load('nsidc_age_area.npz')['nsidc_age_area']
 nsidc_dates = np.load('nsidc_age_area.npz')['nsidc_dates']
 
-nersc_age_area = np.load('nersc_age_area.npz')['nersc_age_area']
-nersc_dates = np.load('nersc_age_area.npz')['nersc_dates']
+nersc_age_area = np.load('nersc_age_area_fv6.npz')['nersc_age_area']
+nersc_dates = np.load('nersc_age_area_fv6.npz')['nersc_dates']
 
 osi_myi_areas = np.load('osi_myi_areas.npz')['osi_myi_areas']
 osi_dates = np.load('osi_myi_areas.npz')['osi_dates']
@@ -96,6 +96,6 @@ plt.xticks([0.5, 3.5, 6.5, 9.5], ['2013-01-01', '2014-01-01', '2015-01-01', '201
 plt.xlabel('Years')
 plt.ylabel('Area, 10$^6$ km$^2$')
 plt.tight_layout(pad=0)
-plt.savefig('figure_11_sia_interannual_fv5.png', dpi=300, )
+plt.savefig('figure_11_sia_interannual_fv6.png', dpi=300, )
 plt.close('all')
 
