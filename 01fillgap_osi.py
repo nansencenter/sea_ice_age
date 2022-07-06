@@ -25,7 +25,7 @@ w = 0.5
 cMin = 15
 
 fill_func = fill_med_osi_uv_2
-odir = '/data1/antonk/sea_ice_age/osi405c_demo_archive_filled_v6/'
+odir = '/home/antonk/sea_ice_age/osi405c_demo_archive_filled_v6/'
 odir_png = f'{odir}/png'
 min_conc = 0.05
 n = 3
