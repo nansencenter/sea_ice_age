@@ -159,100 +159,66 @@ def isdir_or_create(years, outdir):
 
     return
     
-
-def get_files_for_mean(sid_files, index, year, month, sid_dir):
-    '''return 3 sid files for average around the define date
-    [index-1:index+1]
+def get_files_for_mean(sid_files, index, year, sid_dir):
+    '''return 3 sid files for average around the define date (+/- 1 day)
     if 1st or last day of the month,
         get the last day of previous month, or the 1st day of next month
     '''
-    if index == 0:  # first day of 1 month
-        pmo = get_previous_month(mo) 
-        pyr = int(year) - 1
-        if pyr < 1991:  # min year
-            return sid_files[:3]
-        pre_sid = [f for f in sorted(glob.glob(f'{sid_dir}/{pyr}/{pmo}/*/*nc'))][-1]      
-        return [pre_sid] + sid_files[index:index+2]
-    
-    elif index == len(sid_files)-1:  # last day of 1 month
-        nmo = get_next_month(mo)
-        nyr = int(year) + 1
-        if nyr > 2020:  # max year
-            return sid_files[index-2:index+1]
-        next_sid = [f for f in sorted(glob.glob(f'{sid_dir}/{nyr}/{nmo}/*/*nc'))][0]
-        return sid_files[index-1:index+1] + [next_sid]
-
-    else:  # all other cases
+    if index == 0 and year == '1991':  # first data available: (+ 2 day)
+        return sid_files[:3]   
+    elif index == len(sid_files)-1 and year == '2020':  # last data available: (- 2 day)
+        return sid_files[-3:]
+    else:  # all other cases: (+/- 1 day)
         return sid_files[index-1:index+2]
 
 
-def get_previous_month(mo):
-    '''return previous month in string format
-    '''
-    prev_month = int(mo) - 1
-    if prev_month < 1:
-        return '12'
-    else:
-        return f'{prev_month}'.zfill(2)
-
-def get_next_month(mo):
-    '''return next month in string format
-    '''
-    next_month = int(mo) + 1
-    if next_month > 12:
-        return '01'
-    else:
-        return f'{next_month}'.zfill(2)
-    
 # files location
 sic_dir = '/Data/sim/data/OSISAF_ice_conc_CDR/'
 sid_dir = '/Data/sim/data/OSISAF_ice_drift_CDR_v1pre_multi_oi/'
 outdir = '/home/leoede/sea_ice_age/newosi_quality_test/'
 
-# flags parameters
-flag_values = np.array([ 0,  1,  2,  3,  4,  5, 10, 11, 12, 13, 20, 21, 22, 23, 30])
-flag_conv = np.zeros(31)
-flag_conv[flag_values] = np.arange(flag_values.size)
-
 
 # loop on all years, all months
-# years = [str(x) for x in range(1991,2021)]
-years = [str(x) for x in range(2014,2018)]
-
-months = [f'{x}'.zfill(2) for x in range(1,13)]
-
-# years = ['1991','1992','1993']  # for testing
-# months = ['03','04']
+years = [str(x) for x in range(1991,2021)]
 
 # create all subfolders to store results
 isdir_or_create(years, outdir)
                
-        
-for year in years:
-    for mo in months:
-        sic_files = sorted(glob.glob(f'{sic_dir}/{year}/{mo}/*nc')) # [:3]
-        sic_dates = [f.split('_')[-1].split('.')[0] for f in sic_files]
-        sid_files = [f for f in sorted(glob.glob(f'{sid_dir}/{year}/{mo}/*/*nc')) if f.split('-')[-1].split('.')[0] in sic_dates]
+sic_files = sorted(glob.glob(f'{sic_dir}/*/*/*nc'))# [:3]
+# remove sic_files before 1991: because sid files not available
+# remove after 2021 01 01 for same reason
+beg_idx = np.where(np.array([sfile.find('1991') for sfile in sic_files]) >-1)[0][0]
+end_idx = np.where(np.array([sfile.find('2021/') for sfile in sic_files]) >-1)[0][0]
+sic_files = sic_files[beg_idx:end_idx]
 
-        # define output dir
-        odir = f'{outdir}{year}/'
-        odir_png = f'{outdir}{year}/png/'
+sic_dates = [f.split('_')[-1].split('.')[0] for f in sic_files]
+sid_files = [f for f in sorted(glob.glob(f'{sid_dir}/*/*/*/*nc')) if f.split('-')[-1].split('.')[0] in sic_dates]
 
-        # loop on all files 
-        for idx, (sic_file, sid_file) in enumerate(zip(sic_files, sid_files)):
-            # get files for mean on 3 days
-            m_sid_files = get_files_for_mean(sid_files, idx, year, mo, sid_dir)
-            # retrieve mean dx, dy
-            ddx, ddy = retrieve_mean_dxdy(m_sid_files)
-            # retrieve sic, dx, dy
-            sic, dx, dy, dflag, sic_mask = retrieve_file_variables(sic_file, sid_file)
-            # first correction
-            dxo, dyo = replace_pixels(dx, dy, dflag, ddx, ddy, showfig=False)
-            # second correction
-            dxoff, dyoff = smooth(dxo, dyo, sic_mask)
-            # save as .npz
-            ofile = os.path.join(odir, os.path.basename(sid_file) + '.npz')
-            print('Save:', os.path.basename(ofile))
-            np.savez(ofile, u=dxoff, v=dyoff, c=sic)
-            # plot png: u, v, sic
-            plot_opngs(ofile, odir_png)
+# loop on all files 
+for idx, (sic_file, sid_file) in enumerate(zip(sic_files, sid_files)):
+    # get year and output directories
+    year = sid_file[51:55]
+    odir = f'{outdir}{year}/'
+    odir_png = f'{outdir}{year}/png/'
+
+    # if ofile exists, skip processing
+    ofile = os.path.join(odir, os.path.basename(sid_file) + '.npz')
+    if os.path.isfile(ofile):
+        print('Skipping process for: {ofile}')
+#         continue
+
+    # get files for mean on 3 days
+    m_sid_files = get_files_for_mean(sid_files, idx, year, sid_dir)
+    # retrieve mean dx, dy
+    ddx, ddy = retrieve_mean_dxdy(m_sid_files)
+    # retrieve sic, dx, dy
+    sic, dx, dy, dflag, sic_mask = retrieve_file_variables(sic_file, sid_file)
+    # first correction
+    dxo, dyo = replace_pixels(dx, dy, dflag, ddx, ddy, showfig=False)
+    # second correction
+    dxoff, dyoff = smooth(dxo, dyo, sic_mask)
+    # save as .npz
+    print('Save:', os.path.basename(ofile))
+    np.savez(ofile, u=dxoff, v=dyoff, c=sic)
+    # plot png: u, v, sic
+    plot_opngs(ofile, odir_png)
