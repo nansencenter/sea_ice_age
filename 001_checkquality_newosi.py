@@ -159,6 +159,50 @@ def isdir_or_create(years, outdir):
 
     return
     
+
+def get_files_for_mean(sid_files, index, year, month, sid_dir):
+    '''return 3 sid files for average around the define date
+    [index-1:index+1]
+    if 1st or last day of the month,
+        get the last day of previous month, or the 1st day of next month
+    '''
+    if index == 0:  # first day of 1 month
+        pmo = get_previous_month(mo) 
+        pyr = int(year) - 1
+        if pyr < 1991:  # min year
+            return sid_files[:3]
+        pre_sid = [f for f in sorted(glob.glob(f'{sid_dir}/{pyr}/{pmo}/*/*nc'))][-1]      
+        return [pre_sid] + sid_files[index:index+2]
+    
+    elif index == len(sid_files)-1:  # last day of 1 month
+        nmo = get_next_month(mo)
+        nyr = int(year) + 1
+        if nyr > 2020:  # max year
+            return sid_files[index-2:index+1]
+        next_sid = [f for f in sorted(glob.glob(f'{sid_dir}/{nyr}/{nmo}/*/*nc'))][0]
+        return sid_files[index-1:index+1] + [next_sid]
+
+    else:  # all other cases
+        return sid_files[index-1:index+2]
+
+
+def get_previous_month(mo):
+    '''return previous month in string format
+    '''
+    prev_month = int(mo) - 1
+    if prev_month < 1:
+        return '12'
+    else:
+        return f'{prev_month}'.zfill(2)
+
+def get_next_month(mo):
+    '''return next month in string format
+    '''
+    next_month = int(mo) + 1
+    if next_month > 12:
+        return '01'
+    else:
+        return f'{next_month}'.zfill(2)
     
 # files location
 sic_dir = '/Data/sim/data/OSISAF_ice_conc_CDR/'
@@ -173,7 +217,7 @@ flag_conv[flag_values] = np.arange(flag_values.size)
 
 # loop on all years, all months
 # years = [str(x) for x in range(1991,2021)]
-years = [str(x) for x in range(1991,1993)]
+years = [str(x) for x in range(2014,2018)]
 
 months = [f'{x}'.zfill(2) for x in range(1,13)]
 
@@ -193,12 +237,13 @@ for year in years:
         # define output dir
         odir = f'{outdir}{year}/'
         odir_png = f'{outdir}{year}/png/'
-        
-        # retrieve mensual mean dx, dy
-        ddx, ddy = retrieve_mean_dxdy(sid_files)
 
         # loop on all files 
-        for sic_file, sid_file in zip(sic_files, sid_files):
+        for idx, (sic_file, sid_file) in enumerate(zip(sic_files, sid_files)):
+            # get files for mean on 3 days
+            m_sid_files = get_files_for_mean(sid_files, idx, year, mo, sid_dir)
+            # retrieve mean dx, dy
+            ddx, ddy = retrieve_mean_dxdy(m_sid_files)
             # retrieve sic, dx, dy
             sic, dx, dy, dflag, sic_mask = retrieve_file_variables(sic_file, sid_file)
             # first correction
