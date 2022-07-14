@@ -204,8 +204,8 @@ for idx, (sic_file, sid_file) in enumerate(zip(sic_files, sid_files)):
     # if ofile exists, skip processing
     ofile = os.path.join(odir, os.path.basename(sid_file) + '.npz')
     if os.path.isfile(ofile):
-        print('Skipping process for: {ofile}')
-#         continue
+        print(f'Skipping process for: {ofile}')
+        continue
 
     # get files for mean on 3 days
     m_sid_files = get_files_for_mean(sid_files, idx, year, sid_dir)
