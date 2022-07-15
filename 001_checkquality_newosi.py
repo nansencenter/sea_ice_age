@@ -4,7 +4,7 @@ import os
 import matplotlib.pyplot as plt
 from netCDF4 import Dataset
 import numpy as np
-from scipy.ndimage import zoom, distance_transform_edt, generic_filter, median_filter
+from scipy.ndimage import zoom, distance_transform_edt, generic_filter, median_filter, gaussian_filter
 import cmocean.cm as cm
 
 def fill_gaps_nn(array, distance=2, mask=None):
@@ -32,6 +32,20 @@ def fill_gaps_nn(array, distance=2, mask=None):
     array[gpi] = array[r, c]
     return array
 
+
+def gaussian_filter_nan(a, sigma, truncate):
+    b = a.copy()
+    b[np.isnan(a)]=0
+    bb = gaussian_filter(b, sigma=sigma, truncate=truncate)
+
+    w = np.ones_like(b)
+    w[np.isnan(b)] = 0
+    ww = gaussian_filter(w, sigma=sigma, truncate=truncate)
+
+    return bb / ww
+
+
+
 def retrieve_mean_dxdy(sid_files):
     '''
     returns ddx, dx mean of all sid files
@@ -51,6 +65,39 @@ def retrieve_mean_dxdy(sid_files):
         ddy.append(dy)
 
     return np.nanmean(ddx, axis=0), np.nanmean(ddy, axis=0)
+
+
+def retrieve_nanmean_dxdy(sid_files):
+    '''2nd iteration of correction: we take the mean and we put nan to bad pixels values (detected with flag)
+    '''
+    ddx = []
+    ddy = []
+    ddflag = []
+    
+    ddx_nan = []
+    ddy_nan = []
+
+    # get data from files
+    for sid_file in sid_files:
+        print(sid_file)
+        dds = Dataset(sid_file)
+        ddx.append(dds['dX'][0].filled(np.nan))
+        ddy.append(dds['dY'][0].filled(np.nan))
+        ddflag.append(dds['status_flag'][0])
+        
+    # average with nan
+    for dx,dy,dflag in zip(ddx, ddy, ddflag):
+        bad_pix = (dflag==22) * (dx == 0) * (dy == 0)
+        dx[bad_pix] = np.nan
+        ddx_nan.append(dx)
+        dy[bad_pix] = np.nan
+        ddy_nan.append(dy)
+
+    dx_mean = np.nanmean(ddx_nan, axis=0)
+    dy_mean = np.nanmean(ddy_nan, axis=0)
+    
+    return dx_mean, dy_mean
+
 
 
 def replace_pixels(dx, dy, dflag, dx_mean, dy_mean, showfig = False):
@@ -78,17 +125,16 @@ def replace_pixels(dx, dy, dflag, dx_mean, dy_mean, showfig = False):
 
 
     if showfig:
-        plt.imshow(replace_w_mean)
-        plt.show()
-        
-        fig, ax = plt.subplots(1,2, figsize=(14,7))
-        ax[0].imshow(dxo, interpolation='nearest', clim=[-20, 20], cmap=cm.balance)
-        ax[1].imshow(dyo, interpolation='nearest', clim=[-20, 20], cmap=cm.balance)
-        plt.show()
+        fig, ax = plt.subplots(1,3, figsize=(21,7))
+        ax[0].imshow(replace_w_mean)
+        ax[1].imshow(dxo, interpolation='nearest', clim=[-20, 20], cmap=cm.balance)
+        ax[2].imshow(dyo, interpolation='nearest', clim=[-20, 20], cmap=cm.balance)
+        plt.savefig(f"/home/leoede/sea_ice_age/newosi_quality_test/test/replace_pixels.png")
+        plt.close()
     
-    return dxo, dyo
+    return dxo, dyo, replace_w_mean
     
-def smooth(dxo, dyo, sic_mask, showfig = False):
+def smooth(dxo, dyo, sic_mask, savefig = False):
     '''Generic filter to remove outliers and blur nearest neighbors
     '''
     dxof = generic_filter(dxo, np.nanmedian, 3)
@@ -101,17 +147,43 @@ def smooth(dxo, dyo, sic_mask, showfig = False):
     dyoff[np.isnan(sic_mask[1:-1:3, 1:-1:3])] = np.nan
 
     
-    if showfig:
+    if savefig:
         fig, ax = plt.subplots(1,3,figsize=(21,7))
         ax[0].imshow(dyof, interpolation='nearest', clim=[-20, 20], cmap='gray')
         ax[0].imshow(sic_mask[1:-1:3, 1:-1:3], interpolation='nearest', clim=[0,1], cmap='bwr', alpha=0.2)
 
         ax[1].imshow(dxoff, interpolation='nearest', clim=[-20, 20], cmap=cm.balance)
         ax[2].imshow(dyoff, interpolation='nearest', clim=[-20, 20], cmap=cm.balance)
-        plt.show()
+        plt.savefig(f"/home/leoede/sea_ice_age/newosi_quality_test/test/gen_smooth.png")
 
     return dxoff, dyoff
-        
+
+
+def advanced_smooth(dxo, dyo, sic_mask, showfig = False):
+    '''Second generation of filter: gaussian filter
+    '''
+    dxof1 = gaussian_filter_nan(dxo, 1, 2)
+    dyof1 = gaussian_filter_nan(dyo, 1, 2)
+
+    dxoff1 = fill_gaps_nn(dxof1, 5)
+    dyoff1 = fill_gaps_nn(dyof1, 5)
+
+    dxoff1[np.isnan(sic_mask[1:-1:3, 1:-1:3])] = np.nan
+    dyoff1[np.isnan(sic_mask[1:-1:3, 1:-1:3])] = np.nan
+    
+    if showfig:
+        fig, ax = plt.subplots(1,3,figsize=(21,7))
+        ax[0].imshow(dyof1, interpolation='nearest', clim=[-20, 20], cmap='gray')
+        ax[0].imshow(sic_mask[1:-1:3, 1:-1:3], interpolation='nearest', clim=[0,1], cmap='bwr', alpha=0.2)
+
+        ax[1].imshow(dxoff1, interpolation='nearest', clim=[-20, 20], cmap=cm.balance)
+        ax[2].imshow(dyoff1, interpolation='nearest', clim=[-20, 20], cmap=cm.balance)
+        plt.savefig(f"/home/leoede/sea_ice_age/newosi_quality_test/test/adv_smooth.png")
+        plt.close()
+    
+    return dxoff1, dyoff1
+    
+    
 def retrieve_file_variables(sic_file, sid_file):
     '''returns sic, dx, dy, dflag, sic_mask for one pair of file
     '''
@@ -160,17 +232,55 @@ def isdir_or_create(years, outdir):
     return
     
 def get_files_for_mean(sid_files, index, year, sid_dir):
-    '''return 3 sid files for average around the define date (+/- 1 day)
+    '''return 3 sid files for average around the define date (+/- 3 day)
     if 1st or last day of the month,
         get the last day of previous month, or the 1st day of next month
     '''
     if index == 0 and year == '1991':  # first data available: (+ 2 day)
-        return sid_files[:3]   
+        return sid_files[:7]   
     elif index == len(sid_files)-1 and year == '2020':  # last data available: (- 2 day)
-        return sid_files[-3:]
-    else:  # all other cases: (+/- 1 day)
-        return sid_files[index-1:index+2]
+        return sid_files[-7:]
+    else:  # all other cases: 
+#         return sid_files[index-1:index+2]  # (+/- 1 day)
+        return sid_files[index-3:index+4]  # (+/- 1 day)
 
+def compute_dist_weight(replace_w_mean, max_dist=10, showfig=False):
+    '''
+    '''
+    dist = distance_transform_edt(replace_w_mean, return_distances=True) + distance_transform_edt(~replace_w_mean, return_distances=True)
+    dist_weight = 1 - np.clip(dist, 0, max_dist)/max_dist
+    
+    if showfig:
+        fig, ax = plt.subplots(1,1,figsize=(5,5))
+        plt.imshow(dist_weight)
+        plt.colorbar()
+        plt.savefig(f"/home/leoede/sea_ice_age/newosi_quality_test/test/dist_weight.png")
+        plt.close()
+    
+    return dist_weight
+
+def apply_weight_correction(dist_weight, dxoff1, dyoff1, dxoff, dyoff, savefig=False):
+    '''Apply distance weighted correction to dx, dy
+    '''
+    dxw = dist_weight * dxoff1 + (1 - dist_weight) * dxoff
+    dyw = dist_weight * dyoff1 + (1 - dist_weight) * dyoff
+
+    if savefig:
+        fig, ax = plt.subplots(2,3,figsize=(21,15))
+        ax[0,0].imshow(dxoff, interpolation='nearest', clim=[-20, 20], cmap=cm.balance)
+        ax[1,0].imshow(dyoff, interpolation='nearest', clim=[-20, 20], cmap=cm.balance)
+
+        ax[0,1].imshow(dxw, interpolation='nearest', clim=[-20, 20], cmap=cm.balance)
+        ax[1,1].imshow(dyw, interpolation='nearest', clim=[-20, 20], cmap=cm.balance)
+
+        ax[0,2].imshow(dxw-dxoff, interpolation='nearest', clim=[-5, 5], cmap=cm.balance)
+        ax[1,2].imshow(dyw-dyoff, interpolation='nearest', clim=[-5, 5], cmap=cm.balance)
+        plt.savefig(f"/home/leoede/sea_ice_age/newosi_quality_test/test/weight_correction.png")
+        plt.close()
+    
+    return dxw, dyw
+
+    
 
 # files location
 sic_dir = '/Data/sim/data/OSISAF_ice_conc_CDR/'
@@ -203,22 +313,29 @@ for idx, (sic_file, sid_file) in enumerate(zip(sic_files, sid_files)):
 
     # if ofile exists, skip processing
     ofile = os.path.join(odir, os.path.basename(sid_file) + '.npz')
-    if os.path.isfile(ofile):
-        print(f'Skipping process for: {ofile}')
-        continue
+#     if os.path.isfile(ofile):
+#         print(f'Skipping process for: {ofile}')
+#         continue
 
-    # get files for mean on 3 days
+    # get files for mean on 7 days
     m_sid_files = get_files_for_mean(sid_files, idx, year, sid_dir)
     # retrieve mean dx, dy
-    ddx, ddy = retrieve_mean_dxdy(m_sid_files)
+    ddx, ddy = retrieve_nanmean_dxdy(m_sid_files)
     # retrieve sic, dx, dy
     sic, dx, dy, dflag, sic_mask = retrieve_file_variables(sic_file, sid_file)
     # first correction
-    dxo, dyo = replace_pixels(dx, dy, dflag, ddx, ddy, showfig=False)
+    dxo, dyo, replace_w_mean = replace_pixels(dx, dy, dflag, ddx, ddy)
     # second correction
     dxoff, dyoff = smooth(dxo, dyo, sic_mask)
+    dxoff1, dyoff1 = advanced_smooth(dxo, dyo, sic_mask)
+    # correction as a function of the distance to the bad pixels
+    dist_weight = compute_dist_weight(replace_w_mean, max_dist=10)
+    dxw, dyw = apply_weight_correction(dist_weight, dxoff1, dyoff1, dxoff, dyoff)
+    
     # save as .npz
     print('Save:', os.path.basename(ofile))
-    np.savez(ofile, u=dxoff, v=dyoff, c=sic)
+#     np.savez(ofile, u=dxoff, v=dyoff, c=sic)  # first correction: not enough
+    np.savez(ofile, u=dxw, v=dyw, c=sic)
+    
     # plot png: u, v, sic
     plot_opngs(ofile, odir_png)
