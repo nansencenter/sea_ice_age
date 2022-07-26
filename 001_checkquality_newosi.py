@@ -32,18 +32,14 @@ def fill_gaps_nn(array, distance=2, mask=None):
     array[gpi] = array[r, c]
     return array
 
-
 def gaussian_filter_nan(a, sigma, truncate):
     b = a.copy()
     b[np.isnan(a)]=0
     bb = gaussian_filter(b, sigma=sigma, truncate=truncate)
-
     w = np.ones_like(b)
     w[np.isnan(b)] = 0
     ww = gaussian_filter(w, sigma=sigma, truncate=truncate)
-
     return bb / ww
-
 
 
 def retrieve_mean_dxdy(sid_files):
@@ -51,7 +47,6 @@ def retrieve_mean_dxdy(sid_files):
     returns ddx, dx mean of all sid files
             ddy, dy mean of all sid files
     '''
-    
     ddx = []
     ddy = []
 
@@ -99,12 +94,10 @@ def retrieve_nanmean_dxdy(sid_files):
     return dx_mean, dy_mean
 
 
-
 def replace_pixels(dx, dy, dflag, dx_mean, dy_mean, showfig = False):
     '''Replace pixels with drift x and y == 0 and flag == 22
     Replace by nearest neighbors averaged with mean
     '''  
-    
     replace_w_mean = (dflag==22) * (dx == 0) * (dy == 0)  # pixels to replace
 
     dxo = np.array(dx)
@@ -140,6 +133,9 @@ def smooth(dxo, dyo, sic_mask, savefig = False):
     dxof = generic_filter(dxo, np.nanmedian, 3)
     dyof = generic_filter(dyo, np.nanmedian, 3)
 
+    dxof = gaussian_filter_nan(dxof, 1, 1)
+    dyof = gaussian_filter_nan(dyof, 1, 1)
+
     dxoff = fill_gaps_nn(dxof, 5)
     dyoff = fill_gaps_nn(dyof, 5)
 
@@ -157,7 +153,6 @@ def smooth(dxo, dyo, sic_mask, savefig = False):
         plt.savefig(f"/home/leoede/sea_ice_age/newosi_quality_test/test/gen_smooth.png")
 
     return dxoff, dyoff
-
 
 def advanced_smooth(dxo, dyo, sic_mask, showfig = False):
     '''Second generation of filter: gaussian filter
@@ -182,7 +177,6 @@ def advanced_smooth(dxo, dyo, sic_mask, showfig = False):
         plt.close()
     
     return dxoff1, dyoff1
-    
     
 def retrieve_file_variables(sic_file, sid_file):
     '''returns sic, dx, dy, dflag, sic_mask for one pair of file
@@ -285,7 +279,7 @@ def apply_weight_correction(dist_weight, dxoff1, dyoff1, dxoff, dyoff, savefig=F
 # files location
 sic_dir = '/Data/sim/data/OSISAF_ice_conc_CDR/'
 sid_dir = '/Data/sim/data/OSISAF_ice_drift_CDR_v1pre_multi_oi/'
-outdir = '/home/leoede/sea_ice_age/newosi_quality_test/'
+outdir = '/Data/sim/data/OSISAF_ice_drift_CDR_v1pre_multi_oi/postproc_v3/'
 
 
 # loop on all years, all months
