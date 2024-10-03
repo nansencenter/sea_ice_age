@@ -1,3 +1,6 @@
+import matplotlib
+matplotlib.use('agg')
+
 import glob
 
 import os
@@ -302,14 +305,14 @@ sid_files = [f for f in sorted(glob.glob(f'{sid_dir}/*/*/*/*nc')) if f.split('-'
 for idx, (sic_file, sid_file) in enumerate(zip(sic_files, sid_files)):
     # get year and output directories
     year = sid_file[51:55]
-    odir = f'{outdir}{year}/'
-    odir_png = f'{outdir}{year}/png/'
+    odir = f'{outdir}/{year}/'
+    odir_png = f'{outdir}/{year}/png/'
 
     # if ofile exists, skip processing
     ofile = os.path.join(odir, os.path.basename(sid_file) + '.npz')
-#     if os.path.isfile(ofile):
-#         print(f'Skipping process for: {ofile}')
-#         continue
+    if os.path.isfile(ofile):
+        print(f'Skipping process for: {ofile}')
+        continue
 
     # get files for mean on 7 days
     m_sid_files = get_files_for_mean(sid_files, idx, year, sid_dir)
