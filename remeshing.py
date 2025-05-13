@@ -440,7 +440,10 @@ def replace_negative_element_with_two(x, y, t, neg_area_i):
     new_triangles = np.vstack([new_triangles, new_tri1, new_tri2])
     return new_triangles
 
-def get_min_area_for_valid_elemenst(x, y, t, area, fixed_nodes_idx):
+def get_min_area_for_valid_elemenst(x, y, t, area, fixed_nodes_idx=None):
+    if fixed_nodes_idx is None:
+        min_area_i = np.argmin(area)
+        return area[min_area_i], min_area_i
     fixed_x_flag = np.zeros(x.size, dtype=bool)
     fixed_x_flag[fixed_nodes_idx] = True
     fixed_elem_flag = fixed_x_flag[t].sum(axis=1) == 3
