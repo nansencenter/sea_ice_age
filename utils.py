@@ -7,6 +7,7 @@ import numpy as np
 from shapely.geometry import Polygon
 from scipy.interpolate import RectBivariateSpline
 from scipy.spatial import KDTree
+from scipy.ndimage import distance_transform_edt
 
 from remeshing import (
     get_area,
@@ -196,3 +197,31 @@ def get_area_ratio(tri0, tri_a, tri_o, src2dst, weights):
     area_ratio7 = np.zeros(tri_o.triangles.shape[0]) + 0
     np.add.at(area_ratio7, src2dst[:,1], area_ratio1[src2dst[:,0]] * weights)
     return area_ratio7
+
+def fill_gaps(array, mask, distance=15):
+    """ Fill gaps in input raster
+
+    Parameters
+    ----------
+    array : 2D numpy.array
+        Ratser with deformation field
+    mask : 2D numpy.array
+        Where are gaps
+    distance : int
+        Minimum size of gap to fill
+
+    Returns
+    -------
+    arra : 2D numpy.array
+        Ratser with gaps filled
+
+    """
+    dist, indi = distance_transform_edt(
+        mask,
+        return_distances=True,
+        return_indices=True)
+    gpi = dist <= distance
+    r,c = indi[:,gpi]
+    new_array = np.array(array)
+    new_array[gpi] = array[r,c]
+    return new_array
