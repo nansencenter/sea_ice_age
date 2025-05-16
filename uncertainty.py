@@ -24,85 +24,73 @@ def std_filter_using_windows(image, size=25):
     
     return std_image
 
-def compute_c_std(ifile):
-    # load cached gridded STD
-    ofile = ifile.replace('ice_drift_nh', 'ice_conc_std_nh')
-    if os.path.exists(ofile):
-        c_std_grd = np.load(ofile, allow_pickle=True)['c_std'].item()
-        return c_std_grd
-
-    # compute new gridded STD
-    c_grd = np.load(ifile)['c']
-    c_grd[c_grd < 5] = np.nan
-    c_std_grd = {}
+def compute_std(ifile, col, row):
+    myi = np.load(ifile)['c']
+    myi_grd = np.zeros((row.max() + 1, col.max() + 1)) + np.nan
+    myi_grd[row, col] = myi
+    std_grd = {}
     std_sizes = list(range(3,31,3))
     for size in std_sizes:
-        c_std_grd[size] = std_filter_using_windows(c_grd[1:-1:3, 1:-1:3], size=size).astype(np.float16)
-        c_std_grd[size][np.isnan(c_std_grd[size])] = 0
-    
-    # save to cache
-    np.savez(ofile, c_std=c_std_grd)
-    return c_std_grd 
+        std_grd[size] = std_filter_using_windows(myi_grd, size=size).astype(np.float16)
+        std_grd[size][np.isnan(std_grd[size])] = 0
+    return std_grd
+
 
 class ComputeSidSicUncertainty:
-    def __init__(self, ifiles, idates, start_date, sia_dir, mesh_dir, mesh_init_file, xc, yc):
-        self.ifiles = ifiles
-        self.idates = idates
-        self.start_date = start_date
+    def __init__(self, sia_dir):
         self.sia_dir = sia_dir
-        self.mesh_dir = mesh_dir
-        self.mesh_init_file = mesh_init_file
-        self.xc = xc
-        self.yc = yc
 
-    def compute_sid_sic_uncertainty(self, i):
-        ifile = self.ifiles[i]
-        idate = self.idates[i]
+    def save_sid_sic_uncertainty(self, idate):
+        xel_min = -2000
+        yel_min = -2450
+        node_distance_mean = 30
 
-        ofile = f'{self.sia_dir}/unc/{self.start_date.year}/unc_sidsic_{self.start_date.strftime("%Y%m%d")}_{idate.strftime("%Y%m%d")}.npz'
-        if os.path.exists(ofile):
-            #unc_sic_sid = np.load(ofile)['unc_sic_sid']
-            return #unc_sic_sid
+        afile = f'{self.sia_dir}/age/{idate.year}/age_{idate.strftime("%Y%m%d")}.npz'
+        if not os.path.exists(afile):
+            print(f'File {afile} does not exist.')
+            return
+        with np.load(afile) as ds:
+            x = ds['x']
+            y = ds['y']
+            t = ds['t'].astype(int)
+        xel = x[t].mean(axis=1)
+        yel = y[t].mean(axis=1)
+        col = ((xel  - xel_min) / 25).astype(int)
+        row = ((yel  - yel_min) / 25).astype(int)
 
-        mesh_file, _ = get_mesh_files(idate, self.mesh_dir, self.mesh_init_file)
-        with np.load(mesh_file) as d:
-            x0 = d['x']
-            y0 = d['y']
-            t0 = d['t']
-            x0el = x0[t0].mean(axis=1)
-            y0el = y0[t0].mean(axis=1)
+        ifiles = []
+        unc_sid_files = []
+        for i in range(7):
+            src_year = idate.year - i
+            ifile = f'{self.sia_dir}/sic/{src_year}/sic_{src_year}0915_{idate.strftime("%Y%m%d")}.npz'
+            unc_sid_file = f'{self.sia_dir}/unc/{src_year}/unc_sid_{src_year}0905_{idate.strftime("%Y%m%d")}.npz'
 
-        unc_sid_file = f'{self.sia_dir}/unc/{self.start_date.year}/unc_sid_{self.start_date.strftime("%Y%m%d")}_{idate.strftime("%Y%m%d")}.npz'
-        unc_sid_sum = np.load(unc_sid_file)['unc_sid']
+            if os.path.exists(ifile) and os.path.exists(unc_sid_file):
+                ifiles.append(ifile)
+                unc_sid_files.append(unc_sid_file)
 
-        # compute uncertainty of SIC field as STD in the area defined by the uncert of drift field
-        el_size = get_area(x0, y0, t0)**0.5
-        el_size_mean = el_size.mean()
-        sid_unc_rel_to_el_size = unc_sid_sum / el_size_mean
+        for ifile, unc_sid_file in zip(ifiles, unc_sid_files):
+            ofile = unc_sid_file.replace('unc_sid_', 'unc_sidsic_')
+            if os.path.exists(ofile):
+                continue
+            std_grd = compute_std(ifile, col, row)
+            unc_sid_sum = np.load(unc_sid_file)['unc_sid']
+            min_rel_size_factor = 3
+            min_rel_sizes = np.arange(3, 31, 3)
+            sid_unc_rel_to_el_size = unc_sid_sum / node_distance_mean
+            unc_sic_sid = np.zeros_like(unc_sid_sum)
+            for min_rel_size in min_rel_sizes:
+                uncert_elems = np.nonzero(
+                    (sid_unc_rel_to_el_size >= min_rel_size) * 
+                    (sid_unc_rel_to_el_size < min_rel_size+min_rel_size_factor)
+                )[0]
+                if uncert_elems.size == 0:
+                    continue
+                col_unc_sid = col[uncert_elems]
+                row_unc_sid = row[uncert_elems]
+                unc_sic_sid[uncert_elems] = std_grd[min_rel_size][row_unc_sid, col_unc_sid]
+            np.savez(ofile, unc_sic_sid=unc_sic_sid.astype(np.float16))
 
-        min_rel_size_factor = 3
-        min_rel_sizes = np.arange(3,31,3)-2
-
-        c_std_grd = compute_c_std(ifile)
-        unc_sic_sid = np.zeros_like(unc_sid_sum)
-        for min_rel_size in min_rel_sizes:
-            uncert_elems = np.nonzero(
-                (unc_sid_sum > 0) *
-                (sid_unc_rel_to_el_size >= min_rel_size) * 
-                (sid_unc_rel_to_el_size < min_rel_size+min_rel_size_factor)
-            )[0]
-
-            x_unc_sid = x0el[uncert_elems]
-            y_unc_sid = y0el[uncert_elems]
-
-            grd_shape = self.yc[1:-1:3].size, self.xc[1:-1:3].size
-            rbs = RectBivariateSpline(self.xc[1:-1:3], self.yc[1:-1:3], c_std_grd[min_rel_size+2][:grd_shape[0], :grd_shape[1]][::-1], kx=1, ky=1)
-            c_std_msh = rbs(y_unc_sid, x_unc_sid, grid=False)  
-            unc_sic_sid[uncert_elems] = c_std_msh
-
-        # save to cache
-        np.savez(ofile, unc_sic_sid=unc_sic_sid)
-        #return unc_sic_sid
 
 class ComputeSicUncertainty:
     def __init__(self, ifiles, idates, n_steps, mesh_init_file, mesh_dir, unc_dir, xc, yc):
