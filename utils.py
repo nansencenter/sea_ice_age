@@ -134,41 +134,36 @@ def optimize_mesh(tri_a, tri_r, fixed_nodes_idx, min_ap_ratio=0.18, min_area=20,
     tri = clean_mesh(tri)
     return tri
 
-def get_src2dst_weights(i):
-    xo = get_src2dst_weights.xo
-    yo = get_src2dst_weights.yo
-    to = get_src2dst_weights.to
-    xa = get_src2dst_weights.xa
-    ya = get_src2dst_weights.ya
-    ta = get_src2dst_weights.ta
-    treea = get_src2dst_weights.treea
-    search_dist = get_src2dst_weights.search_dist
+class GetWeights:
+    def __init__(self, xa, ya, ta, xo, yo, to, treea, search_dist):
+        self.xa = xa
+        self.ya = ya
+        self.ta = ta
+        self.xo = xo
+        self.yo = yo
+        self.to = to
+        self.treea = treea
+        self.search_dist = search_dist
 
-    src2dst = []
-    weights = []
-    x = xo[to[i]].mean()
-    y = yo[to[i]].mean()
-    near_elems_1 = treea.query_ball_point([x, y], search_dist)
-    po = make_polygon_shapely(xo[to[i]], yo[to[i]])
-    for j in near_elems_1:
-        pa = make_polygon_shapely(xa[ta[j]], ya[ta[j]])
-        p_int = po.intersection(pa)
-        if p_int.area > 0:
-            src2dst.append((j, i))
-            weights.append(p_int.area / po.area)
-    return src2dst, weights
+    def __call__(self, i):
+        src2dst = []
+        weights = []
+        x = self.xo[self.to[i]].mean()
+        y = self.yo[self.to[i]].mean()
+        near_elems_1 = self.treea.query_ball_point([x, y], self.search_dist)
+        po = make_polygon_shapely(self.xo[self.to[i]], self.yo[self.to[i]])
+        for j in near_elems_1:
+            pa = make_polygon_shapely(self.xa[self.ta[j]], self.ya[self.ta[j]])
+            p_int = po.intersection(pa)
+            if p_int.area > 0:
+                src2dst.append((j, i))
+                weights.append(p_int.area / po.area)
+        return src2dst, weights
 
 def compute_mapping(tri_a, tri_o, search_dist):
-    global get_src2dst_weights
     xa, ya, ta = tri_a.x, tri_a.y, tri_a.triangles
     xo, yo, to = tri_o.x, tri_o.y, tri_o.triangles
-    get_src2dst_weights.xa = xa
-    get_src2dst_weights.ya = ya
-    get_src2dst_weights.ta = ta
-    get_src2dst_weights.xo = xo
-    get_src2dst_weights.yo = yo
-    get_src2dst_weights.to = to
-    get_src2dst_weights.search_dist = search_dist
+
 
     same_in_a, same_in_o = get_same_elements(xa[ta], xo[to])
     new_elems = np.ones(tri_o.triangles.shape[0], dtype=bool)
@@ -179,7 +174,9 @@ def compute_mapping(tri_a, tri_o, search_dist):
     weights = [1] * len(src2dst)
     elem_xa = xa[ta].mean(axis=1)
     elem_ya = ya[ta].mean(axis=1)
-    get_src2dst_weights.treea = KDTree(np.column_stack([elem_xa, elem_ya]))
+    get_src2dst_weights = GetWeights(xa, ya, ta, xo, yo, to,
+                                     KDTree(np.column_stack([elem_xa, elem_ya])),
+                                     search_dist)
 
     with Pool(5) as p:
         res = p.map(get_src2dst_weights, new_elem_idx.tolist())
