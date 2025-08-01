@@ -80,10 +80,7 @@ class ComputeSidSicUncertainty:
             sid_unc_rel_to_el_size = unc_sid_sum / node_distance_mean
             unc_sic_sid = np.zeros_like(unc_sid_sum)
             for min_rel_size in min_rel_sizes:
-                uncert_elems = np.nonzero(
-                    (sid_unc_rel_to_el_size >= min_rel_size) * 
-                    (sid_unc_rel_to_el_size < min_rel_size+min_rel_size_factor)
-                )[0]
+                uncert_elems = np.nonzero(sid_unc_rel_to_el_size > min_rel_size)[0]
                 if uncert_elems.size == 0:
                     continue
                 col_unc_sid = col[uncert_elems]
@@ -112,7 +109,9 @@ class ComputeSicUncertainty:
             t = d['t']
             src2dst = d['src2dst']
             weights = d['weights']
-        return sic_unc, x, y, t, src2dst, weights
+            ar = d['ar']
+            ar[ar == 0] = 0.01
+        return sic_unc, x, y, t, src2dst, weights, ar
 
     def compute_uncertainty(self, start_idx):
         stop_idx = min(start_idx + self.n_steps, len(self.idates))
@@ -131,8 +130,8 @@ class ComputeSicUncertainty:
                     sic_min = d['sic_min']
                 continue
 
-            mesh_file, mesh_dst_file = get_mesh_files(idate, self.mesh_dir, self.mesh_init_file)
-            unc_sic_grd, x, y, t, src2dst, weights = self.load_sic_data(ifile, mesh_file)
+            mesh_file, _ = get_mesh_files(idate, self.mesh_dir, self.mesh_init_file)
+            unc_sic_grd, x, y, t, src2dst, weights, ar = self.load_sic_data(ifile, mesh_file)
             unc_sic_fil = fill_gaps(unc_sic_grd, np.isnan(unc_sic_grd), distance=144)
             
             # interpolate SIC uncertainty to mesh
@@ -148,10 +147,14 @@ class ComputeSicUncertainty:
                 # advect unc_sic_sum (from previous time step)
                 unc_sic_sum_pro = np.zeros(src2dst[:,1].max()+1)
                 np.add.at(unc_sic_sum_pro, src2dst[:,1], unc_sic_sum[src2dst[:,0]] * weights)
+                unc_sic_sum_pro /= ar
+                unc_sic_sum_pro = np.clip(unc_sic_sum_pro, 0, 100)
                 
                 # advect sic_min from previous time step
                 sic_min_pro = np.zeros(src2dst[:,1].max()+1)
                 np.add.at(sic_min_pro, src2dst[:,1], sic_min[src2dst[:,0]] * weights)
+                sic_min_pro /= ar
+                sic_min_pro = np.clip(sic_min_pro, 0, 100)
 
                 # keep uncertainty of the minimal value of SIC
                 min_sic_ids = c < sic_min_pro
@@ -265,11 +268,13 @@ class ComputeTotUncertainty:
         unc_sic_fil[np.isnan(unc_sic_fil)] = 0
         a, c, f, x, y, t = self.load_age(idate)
         unc_obs = RectBivariateSpline(self.xc, self.yc, unc_sic_fil[::-1], kx=1, ky=1)(y[t].mean(axis=1), x[t].mean(axis=1), grid=False)
-        return unc_obs
+        return unc_obs, len(f)
 
     def get_unc_sic_files(self, idate):
         unc_sic_files = []
         for i in range(7):
+            if i == 0 and idate.month == 9 and idate.day < 15:
+                continue
             src_year = idate.year - i
             unc_sic_file = f'{self.unc_dir}/{src_year}/unc_sic_{src_year}0905_{idate.year}{idate.month:02d}{idate.day:02d}.npz'
             if os.path.exists(unc_sic_file):
@@ -318,10 +323,10 @@ class ComputeTotUncertainty:
                 unc_sidsic.append(ds['unc_sic_sid'])
         return unc_sidsic
 
-    def compute_unc_frac(self, unc_obs, unc_myi):
+    def compute_unc_frac(self, unc_obs, unc_myi, len_f):
         unc_fyi = np.hypot(unc_obs, unc_myi[0])
         unc_frac = [unc_fyi]
-        for i in range(len(unc_myi)):
+        for i in range(len_f-1):
             unc_square_sum = 0
             for j in range(min(i+2, len(unc_myi))):
                 unc_square_sum += unc_myi[j]**2
@@ -332,7 +337,10 @@ class ComputeTotUncertainty:
         unc_tot = []
         unc_age = 0
         for i in range(len(unc_frac)):
-            unc_tot.append(np.hypot(unc_frac[i], unc_sic_sid[i]))
+            try:
+                unc_tot.append(np.hypot(unc_frac[i], unc_sic_sid[i]))
+            except IndexError:
+                return None, None
             unc_age += (i * unc_tot[i]/100)**2
         unc_age = np.sqrt(unc_age)
         return unc_tot, unc_age
@@ -341,9 +349,12 @@ class ComputeTotUncertainty:
         unc_tot_file = f'{self.unc_dir}/{idate.year}/unc_tot_{idate.year}{idate.month:02d}{idate.day:02d}.npz'
         if os.path.exists(unc_tot_file):
             return
-        unc_obs = self.load_unc_obs(idate)
+        unc_obs, len_f = self.load_unc_obs(idate)
         unc_myi = self.load_unc_myi(idate)
         unc_sidsic = self.load_unc_sidsic(idate, unc_obs)
-        unc_frac = self.compute_unc_frac(unc_obs, unc_myi)
+        unc_frac = self.compute_unc_frac(unc_obs, unc_myi, len_f)
         unc_tot, unc_age = self.compute_unc_tot(unc_frac, unc_sidsic)
+        if unc_tot is None:
+            print(f'Uncertainty for {idate.strftime("%Y%m%d")} is None')
+            raise
         np.savez(unc_tot_file, unc_tot=np.array(unc_tot).astype(np.float16), unc_age=unc_age.astype(np.float16))
