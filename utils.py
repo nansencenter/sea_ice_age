@@ -244,9 +244,10 @@ class InterpolateSic:
         mesh_date = basename.split('.')[0].split('_')[-1]
         mesh_year = mesh_date[:4]
         # load mesh
-        x = np.load(mesh_file)['x']
-        y = np.load(mesh_file)['y']
-        t = np.load(mesh_file)['t']
+        with np.load(mesh_file) as d:
+            x = d['x']
+            y = d['y']
+            t = d['t']
 
         # load SIC
         file_mask = f'{self.sid_dir}/{mesh_year}/ice_drift_nh_ease*{mesh_date}1200.nc.npz'
