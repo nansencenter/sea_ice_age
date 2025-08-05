@@ -1,0 +1,10 @@
+numpy
+scipy
+matplotlib
+netCDF4
+xarray
+pandas
+tqdm
+scikit-image
+cartopy
+jupyter
