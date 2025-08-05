@@ -1,3 +1,5 @@
+[![DOI](https://zenodo.org/badge/77685919.svg)](https://doi.org/10.5281/zenodo.16743289)
+
 # Sea Ice Age Computation
 
 This repository contains code for computing the age of sea ice using satellite data and numerical algorithms. The project is designed to process input datasets, apply age-tracking logic, and output maps or statistics of sea ice age.
