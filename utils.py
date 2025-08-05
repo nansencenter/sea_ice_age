@@ -459,4 +459,3 @@ class IrregularGridInterpolator(object):
             raise ValueError("'method' should be 'nearest' or 'linear'")
 
         return fld_interp.reshape(self.dst_shape)
-
