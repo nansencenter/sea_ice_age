@@ -139,34 +139,46 @@ class SeaIceAgeDataset(GeoDatasetWrite):
             dataset_doi = "10.5281/zenodo.15773501",
             id = "10.5281/zenodo.15773501",
             history = f"Created on 2025-07-01T00:00:00Z by NERSC Sea Ice Age processing script",
+            acknowledgment = " Research Council of Norway (project 'TARDIS', no. 325241) and the European Space Agency (project 'CCI SAGE', no. 4000147560/25/I-LR",
+            comment = 'No comments',
+            geospatial_bounds = "POLYGON((-5387500 -5387500, 5387500 -5387500, 5387500 5387500, -5387500 5387500, -5387500 -5387500))",
+            processing_level = "Level 4",
+            publisher_name = "Anton Korosov",
+            publisher_url = "https://nersc.no/en/ansatt/anton-korosov/",
+            publisher_email = "anton.korosov@nersc.no",
         )
         for key, value in global_attributes.items():
             self.setncattr(key, value)
 
-    def set_variable(self, vname, data, dims, atts, dtype=np.float32):
+    def set_variable(self, vname, data, dims, atts, dtype=np.float32, pack=None):
         """
-        set variable data and attributes
-        Parameters:
-        -----------
-        vname : str
-            name of new variable
-        data : numpy.ndarray
-            data to set in variable
-        dims : list(str)
-            list of dimension names for the variable
-        atts : dict
-            netcdf attributes to set
-        dtype : type
-            netcdf data type for new variable (eg np.float32 or np.double)
+        pack: optional dict with keys:
+              dtype (np.int16/np.uint8/etc), scale_factor (float), add_offset (float, default 0),
+              _FillValue (int), missing_value (int, optional)
         """
-        ncatts = {k:v for k,v in atts.items() if k != '_FillValue'}
-        kw = dict(zlib=True)# use compression
+        if pack is not None:
+            # add packing attrs to metadata (valid_* stay in real units)
+            scale_factor = np.float32(pack.get('scale_factor', 1.0))
+            add_offset = np.float32(pack.get('add_offset', 0.0))
+
+            atts = {**atts,
+                    'scale_factor': scale_factor,
+                    'add_offset': add_offset,
+                    '_FillValue': np.iinfo(dtype).min}
+
+            atts['valid_max'] = dtype((atts['valid_max'] - add_offset)/ scale_factor)
+            atts['valid_min'] = dtype((atts['valid_min'] - add_offset)/ scale_factor)
+
+            fill_value_scaled = np.iinfo(dtype).min * scale_factor + add_offset
+            data[~np.isfinite(data)] = fill_value_scaled
+
+        ncatts = {k: v for k, v in atts.items() if k != '_FillValue'}
+        kw = dict(zlib=True)
         if '_FillValue' in atts:
-            # needs to be a keyword for createVariable and of right data type
             kw['fill_value'] = dtype(atts['_FillValue'])
         if 'missing_value' in atts:
-            # needs to be of right data type
             ncatts['missing_value'] = dtype(atts['missing_value'])
+
         dst_var = self.createVariable(vname, dtype, dims, **kw)
         ncatts['grid_mapping'] = self.grid_mapping_variable
         dst_var.setncatts(ncatts)
@@ -208,16 +220,19 @@ class ExportNetcdf:
             valid_min = np.float32(0),
             valid_max = np.float32(20),
             ancillary_variables = "sea_ice_age_uncertainty status_flag",
+            coverage_content_type = "modelResult",
         )
 
         self.age_unc_atts = dict(
             long_name = 'Uncertainty in Sea Ice Age',
+            standard_name = 'age_of_sea_ice standard_error',
             name = 'sea_ice_age_uncertainty',
             ancillary_variables = 'status_flag',
             comment = 'Uncertainty is computed based on observational and model errors.',
             units = "years",
             valid_min = np.float32(0),
             valid_max = np.float32(20),
+            coverage_content_type = "modelResult",
         )
 
         self.conc_atts = dict(
@@ -227,17 +242,22 @@ class ExportNetcdf:
             valid_min = np.float32(0),
             valid_max = np.float32(1),
             ancillary_variables = "conc_$YEAR$yi_uncertainty status_flag",
+            coverage_content_type = "modelResult",
+            standard_name='sea_ice_area_fraction',
         )
 
         self.conc_unc_atts = dict(
             long_name = "Uncertainty in concentration of $Numeral$ Year Sea Ice",
+            standard_name = 'sea_ice_area_fraction standard_error',            
             name = "conc_$YEAR$yi_uncertainty",
             units = "1",
             valid_min = np.float32(0),
             valid_max = np.float32(1),
+            coverage_content_type = "modelResult",
         )
 
         self.status_atts = dict(
+            standard_name = 'age_of_sea_ice status_flag',            
             long_name = "status flag array for sea ice age",
             valid_min = np.byte(1),
             valid_max = np.byte(3),
@@ -248,6 +268,7 @@ class ExportNetcdf:
                 "flag = 1: Nominal retrieval by the SIA algorithm",
                 "flag = 2: Position is over land",
                 "flag = 3: Pixel is invalid"],
+            coverage_content_type = "qualityInformation",
         )
 
         self.numerals = [None, 'first', 'second', 'third', 'fourth', 'fifth', 'sixth', 'seventh', 'eighth']
@@ -286,25 +307,26 @@ class ExportNetcdf:
             tbvar[:] = time_bnds_data
 
             ds.set_variable('sea_ice_age', age_grd['age'], ('time', 'y', 'x'), self.age_atts, dtype=np.float32)
-            ds.set_variable('sea_ice_age_uncertainty', age_grd['age_unc'], ('time', 'y', 'x'), self.age_unc_atts, dtype=np.float32)
+            ds.set_variable('sea_ice_age_uncertainty', age_grd['age_unc'], ('time', 'y', 'x'), self.age_unc_atts, dtype=np.int16, pack=dict(scale_factor=0.001, add_offset=0.0))
 
             for age_grd_var in sorted(age_grd_vars):
                 if 'fraction' in age_grd_var:
                     year = age_grd_var.split('_')[1][0]
                     numeral = self.numerals[int(year)]
                     frac_atts = {}
-                    if 'unc' not in age_grd_var:
-                        for key, value in self.conc_atts.items():
-                            if isinstance(value, str):
-                                frac_atts[key] = value.replace('$Numeral$', numeral.title()).replace('$YEAR$', year).replace('$numeral$', numeral)
-                            else:
-                                frac_atts[key] = value
-                    else:
-                        for key, value in self.conc_unc_atts.items():
-                            if isinstance(value, str):
-                                frac_atts[key] = value.replace('$Numeral$', numeral.title()).replace('$YEAR$', year).replace('$numeral$', numeral)
-                            else:
-                                frac_atts[key] = value
-                    ds.set_variable(frac_atts['name'], age_grd[age_grd_var][None]/100., ('time', 'y', 'x'), frac_atts, dtype=np.float32)
+                    use_attributes = self.conc_atts.items()
+                    dtype = np.float32
+                    pack = None
+                    if 'unc' in age_grd_var:
+                        use_attributes = self.conc_unc_atts.items()
+                        dtype = np.int16
+                        pack = dict(scale_factor=0.001, add_offset=0.0)
+
+                    for key, value in use_attributes:
+                        if isinstance(value, str):
+                            frac_atts[key] = value.replace('$Numeral$', numeral.title()).replace('$YEAR$', year).replace('$numeral$', numeral)
+                        else:
+                            frac_atts[key] = value
+                    ds.set_variable(frac_atts['name'], age_grd[age_grd_var][None]/100., ('time', 'y', 'x'), frac_atts, dtype=dtype, pack=pack)
 
             ds.set_variable('status_flag', status_flag + 1, ('time', 'y', 'x'), self.status_atts, dtype=np.byte)
