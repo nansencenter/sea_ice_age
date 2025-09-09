@@ -1,12 +1,12 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """
-Stiuch two nextsim restart files with different meshes.
+Stitch two nextsim restart files with different meshes.
 The first file is remapped to the mesh of the second file.
 The output is saved in a npz file in mesh/YYYY/mesh_YYYYMMDD.npz
 
 Usage:
-    python stich_restarts.py <input_file1> <input_file2> <output_dir> [--search-dist 15000] [--cores 1] [--force 0]
+    python stitch_restarts.py <input_file1> <input_file2> <output_dir> [--search-dist 15000] [--cores 1] [--force 0]
 
 Created on Thu Jun 20 10:00:00 2024
 Created on Thu Jun 20 10:00:00 2024
