@@ -162,7 +162,7 @@ class GetWeights:
                 weights.append(p_int.area / po.area)
         return src2dst, weights
 
-def compute_mapping(tri_a, tri_o, search_dist):
+def compute_mapping(tri_a, tri_o, search_dist, cores=4):
     xa, ya, ta = tri_a.x, tri_a.y, tri_a.triangles
     xo, yo, to = tri_o.x, tri_o.y, tri_o.triangles
 
@@ -180,7 +180,7 @@ def compute_mapping(tri_a, tri_o, search_dist):
                                      KDTree(np.column_stack([elem_xa, elem_ya])),
                                      search_dist)
 
-    with Pool(5) as p:
+    with Pool(cores) as p:
         res = p.map(get_src2dst_weights, new_elem_idx.tolist())
         for r in res:
             src2dst.extend(r[0])
