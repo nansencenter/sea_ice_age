@@ -16,12 +16,9 @@ import argparse
 import os
 
 from matplotlib.tri import Triangulation
-import matplotlib.pyplot as plt
 from pynextsim import NextsimBin
 import numpy as np
 from scipy.spatial import cKDTree
-
-from tqdm.notebook import tqdm
 
 from utils import compute_mapping, get_area_ratio
 
