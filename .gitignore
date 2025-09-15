@@ -6,4 +6,5 @@
 *.log
 *.mp4
 *.feather
+.*.sw?
 data2
