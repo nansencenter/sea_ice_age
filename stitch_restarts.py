@@ -22,6 +22,27 @@ from scipy.spatial import cKDTree
 from utils import compute_mapping, get_area_ratio
 
 
+DEFAULT_SEARCH_DIST = 15e3
+
+DEFAULT_CORES = 1
+
+
+def parse_arguments():
+    parser = argparse.ArgumentParser(description="Process two input files and specify an output directory.")
+    parser.add_argument('input_file1', type=str, help='Path to the first input file')
+    parser.add_argument('input_file2', type=str, help='Path to the second input file')
+    parser.add_argument('output_dir', type=str, help='Path to the output directory')
+    parser.add_argument('--search-dist', type=float,
+            default=DEFAULT_SEARCH_DIST,
+            help=f'Search distance for compute_mapping (default: {DEFAULT_SEARCH_DIST})')
+    parser.add_argument('--cores', type=int,
+            default=DEFAULT_CORES,
+            help=f'Number of cores to use (default: {DEFAULT_CORES})')
+    parser.add_argument('--force', action="store_true",
+            help='Force overwrite of output files')
+    return parser.parse_args()
+
+
 def nextsimbin2tri(restart_file, maskfile='mask.npy', min_x=-2.5e6, max_y=2.1e6, res=20000):
     """ Read Nextsim binary file and mask.
     Return triangulation and node IDs of the masked mesh.
@@ -72,6 +93,7 @@ def nextsimbin2tri(restart_file, maskfile='mask.npy', min_x=-2.5e6, max_y=2.1e6,
     tri = Triangulation(newx, newy, newt)
     ids = new_ids
     return tri, ids
+
 
 def get_tri_a_from_nextsim(tri_0, ids_0, tri_o, ids_o, k=10):
     """ Create triangulation tri_a with the same connectivity as tri_0,
@@ -146,6 +168,7 @@ def get_tri_a_from_nextsim(tri_0, ids_0, tri_o, ids_o, k=10):
     tri_a = Triangulation(new_x, new_y, triangles=tri_0.triangles)
     return tri_a
 
+
 def get_dst_file(input_file2, output_dir):
     """ Create output file path based on the date in input_file2."""
     date_str = os.path.basename(input_file2).split('.')[0].split('_')[1].split('T')[0]
@@ -155,36 +178,35 @@ def get_dst_file(input_file2, output_dir):
     mesh_dst_file = f'{mesh_dst_dir}/mesh_{date_str}.npz'
     return mesh_dst_file
 
-def parse_arguments():
-    parser = argparse.ArgumentParser(description="Process two input files and specify an output directory.")
-    parser.add_argument('input_file1', type=str, help='Path to the first input file')
-    parser.add_argument('input_file2', type=str, help='Path to the second input file')
-    parser.add_argument('output_dir', type=str, help='Path to the output directory')
-    parser.add_argument('--search-dist', type=float, default=15000, help='Search distance for compute_mapping (default: 15000)')
-    parser.add_argument('--cores', type=int, default=1, help='Number of cores to use (default: 1)')
-    parser.add_argument('--force', type=int, default=0, help='Force overwrite of output files (default: 0)')
-    return parser.parse_args()
 
-def main():
-    args = parse_arguments()
+def stitch_restart_pair(input_file1, input_file2, output_dir,
+        force=False, search_dist=DEFAULT_SEARCH_DIST,
+        cores=DEFAULT_CORES):
 
-    print(f"Input File 1: {args.input_file1}")
-    print(f"Input File 2: {args.input_file2}")
-    print(f"Output Directory: {args.output_dir}")
-    print(f"Search Distance: {args.search_dist}")
-    print(f"Cores: {args.cores}")
-    print(f"Force Overwrite: {args.force}")
-    mesh_dst_file = get_dst_file(args.input_file2, args.output_dir)
-    if os.path.exists(mesh_dst_file) and not args.force:
+    print(f"Input File 1: {input_file1}")
+    print(f"Input File 2: {input_file2}")
+    print(f"Output Directory: {output_dir}")
+    print(f"Search Distance: {search_dist}")
+    print(f"Cores: {cores}")
+    print(f"Force Overwrite: {force}")
+    mesh_dst_file = get_dst_file(input_file2, output_dir)
+    if os.path.exists(mesh_dst_file) and not force:
         print(f"Output file {mesh_dst_file} already exists. Use --force 1 to overwrite.")
         return
     
-    tri_0, ids_0 = nextsimbin2tri(args.input_file1)
-    tri_o, ids_o = nextsimbin2tri(args.input_file2)
+    tri_0, ids_0 = nextsimbin2tri(input_file1)
+    tri_o, ids_o = nextsimbin2tri(input_file2)
     tri_a = get_tri_a_from_nextsim(tri_0, ids_0, tri_o, ids_o)
-    src2dst, weights = compute_mapping(tri_a, tri_o, args.search_dist, cores=args.cores)
+    src2dst, weights = compute_mapping(tri_a, tri_o, search_dist, cores=cores)
     area_ratio = get_area_ratio(tri_0, tri_a, tri_o, src2dst, weights)
+    print(f"Saving {mesh_dst_file}")
     np.savez(mesh_dst_file, x=tri_o.x, y=tri_o.y, t=tri_o.triangles, src2dst=src2dst, weights=weights, ar=area_ratio, ids=ids_o)
+
+
+def main():
+    args = parse_arguments()
+    stitch_restart_pair(**vars(args))
+
 
 if __name__ == "__main__":
     main()
