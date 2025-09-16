@@ -83,7 +83,7 @@ def nextsimbin2tri(restart_file, maskfile='mask.npy', min_x=-2.5e6, max_y=2.1e6,
     # subset triangulation by masked elements
     sub_tri = tri.triangles[el_mask]
     # regenerate triangulation by excluding unused nodes
-    uniq_nodes, uniq_inv = np.unique(sub_tri, return_inverse=true)
+    uniq_nodes, uniq_inv = np.unique(sub_tri, return_inverse=True)
     newx = tri.x[uniq_nodes]
     newy = tri.y[uniq_nodes]
     newt = uniq_inv.reshape(-1,3)
@@ -190,7 +190,7 @@ def stitch_restart_pair(input_file1, input_file2, output_dir,
     print(f"Force Overwrite: {force}")
     mesh_dst_file = get_dst_file(input_file2, output_dir)
     if os.path.exists(mesh_dst_file) and not force:
-        print(f"Output file {mesh_dst_file} already exists. Use --force 1 to overwrite.")
+        print(f"Output file {mesh_dst_file} already exists. Use --force to overwrite.")
         return
     
     tri_0, ids_0 = nextsimbin2tri(input_file1)
