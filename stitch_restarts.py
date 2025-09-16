@@ -65,8 +65,7 @@ def nextsimbin2tri(restart_file, maskfile='mask.npy', min_x=-2.5e6, max_y=2.1e6,
     uniq_nodes, uniq_inv = np.unique(sub_tri, return_inverse=True)
     newx = tri.x[uniq_nodes]
     newy = tri.y[uniq_nodes]
-    newi = np.arange(uniq_nodes.size)
-    newt = newi[uniq_inv]
+    newt = uniq_inv.reshape(-1,3)
     new_ids = ids[uniq_nodes]
     # create new triangulation
     tri = Triangulation(newx, newy, newt)
