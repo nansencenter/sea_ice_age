@@ -25,7 +25,7 @@ from utils import compute_mapping, get_area_ratio
 def nextsimbin2tri(restart_file, maskfile='mask.npy', min_x=-2.5e6, max_y=2.1e6, res=20000):
     """ Read Nextsim binary file and mask.
     Return triangulation and node IDs of the masked mesh.
-    
+
     Parameter:
     ----------
     restart_file: str
@@ -36,7 +36,7 @@ def nextsimbin2tri(restart_file, maskfile='mask.npy', min_x=-2.5e6, max_y=2.1e6,
         Coordinates of the upper left corner of the mask.
     res: float
         Resolution of the mask (assumed square pixels).
-    
+
     Returns:
     ------
     tri: Triangulation
@@ -49,7 +49,7 @@ def nextsimbin2tri(restart_file, maskfile='mask.npy', min_x=-2.5e6, max_y=2.1e6,
     n = NextsimBin(restart_file)
     tri = Triangulation(n.mesh_info.nodes_x, n.mesh_info.nodes_y, n.mesh_info.indices)
     ids = n.mesh_info.get_var('id')
-    
+
     # read mask
     mask = np.load(maskfile)
     # convert element coordinates to mask indices
@@ -62,7 +62,8 @@ def nextsimbin2tri(restart_file, maskfile='mask.npy', min_x=-2.5e6, max_y=2.1e6,
     # subset triangulation by masked elements
     sub_tri = tri.triangles[el_mask]
     # regenerate triangulation by excluding unused nodes
-    uniq_nodes, uniq_inv = np.unique(sub_tri, return_inverse=True)
+    uniq_nodes, uniq_inv = np.unique(sub_tri.flatten(), return_inverse=True)
+    uniq_inv = uniq_inv.reshape(-1, 3)
     newx = tri.x[uniq_nodes]
     newy = tri.y[uniq_nodes]
     newi = np.arange(uniq_nodes.size)
