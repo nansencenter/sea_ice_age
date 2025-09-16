@@ -83,8 +83,7 @@ def nextsimbin2tri(restart_file, maskfile='mask.npy', min_x=-2.5e6, max_y=2.1e6,
     # subset triangulation by masked elements
     sub_tri = tri.triangles[el_mask]
     # regenerate triangulation by excluding unused nodes
-    uniq_nodes, uniq_inv = np.unique(sub_tri.flatten(), return_inverse=True)
-    uniq_inv = uniq_inv.reshape(-1, 3)
+    uniq_nodes, uniq_inv = np.unique(sub_tri, return_inverse=true)
     newx = tri.x[uniq_nodes]
     newy = tri.y[uniq_nodes]
     newt = uniq_inv.reshape(-1,3)
