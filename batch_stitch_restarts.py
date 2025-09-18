@@ -17,6 +17,7 @@ import datetime as dt
 from joblib import Parallel, delayed
 
 from stitch_restarts import(
+        get_dst_file,
         stitch_restart_pair,
         DEFAULT_SEARCH_DIST,
         DEFAULT_CORES as DEFAULT_CORES_1PAIR,
@@ -65,17 +66,26 @@ def get_jobs(input_root_dir, start_date, end_date, pattern,
             }
 
     def get_filename(date):
-        basename = date.strftime(pattern)
-        return os.path.join(input_root_dir, basename)
+        rel_path = date.strftime(pattern)
+        return os.path.join(input_root_dir, rel_path)
 
     date = start_date
     while date <= end_date:
         next_date = date + dt.timedelta(1)
-        yield job_opts_common | {
-                "input_file1": get_filename(date),
-                "input_file2": get_filename(next_date),
-                }
+        f1 = get_filename(date)
+        f2 = get_filename(next_date)
         date = next_date
+        output = get_dst_file(f2, output_dir)
+        if os.path.exists(output) and not force:
+            print(f"{output} exists: stopping. Use --force to overwrite.")
+            continue
+        if not (os.path.exists(f1) and os.path.exists(f2)):
+            print(f"WARNING: input_files {f1} and {f2} not present.")
+            continue
+        yield job_opts_common | {
+                "input_file1": f1,
+                "input_file2": f2,
+                }
 
 
 def main():
