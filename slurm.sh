@@ -11,19 +11,25 @@
 #SBATCH --mail-user=xxxxx
 
 function usage {
-    echo slurm.sh START_DATE END_DATE CORES
+    echo "slurm.sh [START_DATE] [END_DATE] [CORES]"
+    echo "    START_DATE: first date to process in yyyymmdd format (default=19910101)"
+    echo "    END_DATE: last date to process in yyyymmdd format (default=20241231)"
+    echo "    CORES: number of dates to do in parallel (default=32)"
     exit 1
 }
-[[ $# -gt 3 ]] && usage
+[[ "$1" == "-h" ]] || [[ "$1" == "--help" ]] || [[ $# -gt 3 ]] && usage
 START_DATE=${1-19910101}
 END_DATE=${2-20241231}
-CORES=${3-36}
+CORES=${4-32}
 
 source /cluster/home/timill/pynextsim.apptainer.src
 
-indir=/cluster/work/users/timill/sea_ice_age/restarts/
-odir=/cluster/work/users/timill/sea_ice_age/stitched_restarts/
+root_dir=/cluster/work/users/timill/sea_ice_age
+indir=$root_dir/restarts
+odir=$root_dir/stitched_restarts
 
-apptainer exec --cleanenv /cluster/projects/nn9878k/sim/apptainer_image_files/nextsim_202311.sif \
+cmd="apptainer exec --cleanenv /cluster/projects/nn9878k/sim/apptainer_image_files/nextsim_202311.sif \
     ./batch_stitch_restarts.py $indir $odir $START_DATE $END_DATE \
-    --cores $CORES --cores-one-pair=1
+    --cores $CORES --cores-one-pair=2"
+echo $cmd
+$cmd
