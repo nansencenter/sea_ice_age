@@ -55,6 +55,16 @@ def parse_arguments():
     return parser.parse_args()
 
 
+def find_input_file(input_root_dir, pattern, date):
+    filename = os.path.join(
+            input_root_dir,
+            date.strftime(patttern),
+            )
+    if os.path.exists(filename):
+        return filename
+    print(f"WARNING: {filename} not present")
+
+
 def get_jobs(input_root_dir, start_date, end_date, pattern,
         output_dir, cores_one_pair, force, search_dist, **kwargs):
 
@@ -65,22 +75,18 @@ def get_jobs(input_root_dir, start_date, end_date, pattern,
             "search_dist": search_dist,
             }
 
-    def get_filename(date):
-        rel_path = date.strftime(pattern)
-        return os.path.join(input_root_dir, rel_path)
 
     date = start_date
     while date <= end_date:
         next_date = date + dt.timedelta(1)
-        f1 = get_filename(date)
-        f2 = get_filename(next_date)
+        f1 = find_input_file(input_root_dir, pattern, date)
+        f2 = find_input_file(input_root_dir, pattern, next_date)
         date = next_date
         output = get_dst_file(f2, output_dir)
         if os.path.exists(output) and not force:
             print(f"{output} exists: stopping. Use --force to overwrite.")
             continue
-        if not (os.path.exists(f1) and os.path.exists(f2)):
-            print(f"WARNING: input_files {f1} and {f2} not present.")
+        if f1 is None or f2 is None:
             continue
         yield job_opts_common | {
                 "input_file1": f1,
