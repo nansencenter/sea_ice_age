@@ -6,7 +6,7 @@ from geodataset.geodataset import GeoDatasetWrite
 import numpy as np
 import pyproj
 
-from utils import IrregularGridInterpolator
+from .utils import IrregularGridInterpolator
 
 class GridAge:
     def __init__(self, xgrd, ygrd, mask, force=False):

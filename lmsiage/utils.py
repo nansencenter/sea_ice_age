@@ -3,7 +3,6 @@ from datetime import timedelta
 from multiprocessing import Pool
 import os
 
-
 from matplotlib.tri import Triangulation
 import numpy as np
 from shapely.geometry import Polygon
@@ -11,7 +10,7 @@ from scipy.interpolate import RectBivariateSpline
 from scipy.spatial import KDTree
 from scipy.ndimage import distance_transform_edt
 
-from remeshing import (
+from .remeshing import (
     get_area,
     remove_small_elements,
     collapse_short_edges,

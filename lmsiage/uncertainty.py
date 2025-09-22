@@ -6,8 +6,7 @@ from scipy.interpolate import RectBivariateSpline
 from skimage.util import view_as_windows
 from scipy.ndimage import uniform_filter
 
-from remeshing import get_area
-from utils import get_mesh_files, fill_gaps
+from .utils import get_mesh_files, fill_gaps
 
 def std_filter_using_windows(image, size=25):
     """

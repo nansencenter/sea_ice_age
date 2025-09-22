@@ -19,7 +19,7 @@ from pynextsim import NextsimBin
 import numpy as np
 from scipy.spatial import cKDTree
 
-from utils import compute_mapping, get_area_ratio
+from lmsiage.utils import compute_mapping, get_area_ratio
 
 
 DEFAULT_SEARCH_DIST = 15e3
