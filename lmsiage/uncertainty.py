@@ -6,6 +6,7 @@ import numpy as np
 from scipy.interpolate import RectBivariateSpline
 from skimage.util import view_as_windows
 from scipy.ndimage import uniform_filter
+from tqdm import tqdm, trange
 
 from lmsiage.mesh_file import MeshFile
 from lmsiage.utils import fill_gaps
@@ -93,86 +94,95 @@ class ComputeSidSicUncertainty:
 
 
 class ComputeSicUncertainty:
-    def __init__(self, ifiles, idates, n_steps, mesh_init_file, mesh_dir, unc_dir, xc, yc):
-        self.ifiles = ifiles
-        self.idates = idates
+    def __init__(self, sid_files, sid_dates, mesh_dir, age_dir, unc_dir, n_steps, xc, yc):
+        self.sid_files = sid_files
+        self.sid_dates = sid_dates
         self.n_steps = n_steps
-        self.mesh_init_file = mesh_init_file
         self.mesh_dir = mesh_dir
+        self.age_dir = age_dir
         self.unc_dir = unc_dir
         self.xc = xc
         self.yc = yc
 
-    def load_sic_data(self, ifile, mesh_src_file):
-        with np.load(ifile) as d:
+    def load_sic_data(self, sid_file, mesh_file):
+        with np.load(sid_file) as d:
             sic_unc = d['sic_unc']
-        with np.load(mesh_src_file) as d:
-            x = d['x']
-            y = d['y']
-            t = d['t']
-            src2dst = d['src2dst']
-            weights = d['weights']
-            ar = d['ar']
-            ar[ar == 0] = 0.01
-        return sic_unc, x, y, t, src2dst, weights, ar
+        
+        mf = MeshFile(mesh_file)
+        x, y, t = mf.load(['x', 'y', 't'], as_dict=False)
+        return sic_unc, x, y, t
 
-    def compute_uncertainty(self, start_idx):
-        stop_idx = min(start_idx + self.n_steps, len(self.idates))
-        unc_sic_sum = None
-        start_date = self.idates[start_idx]
-        odir = f'{self.unc_dir}/{start_date.year}'
-        print(f'Computing uncertainty for {start_date.strftime("%Y%m%d")}, {self.idates[stop_idx-1]}')
-        os.makedirs(odir, exist_ok=True)
-        for i in range(start_idx, stop_idx):
-            ifile = self.ifiles[i]
-            idate = self.idates[i]
-            ofile = f'{odir}/unc_sic_{start_date.strftime("%Y%m%d")}_{idate.strftime("%Y%m%d")}.npz'
-            if os.path.exists(ofile):
-                with np.load(ofile) as d:
-                    unc_sic_sum = d['unc_sic']
-                    sic_min = d['sic_min']
+    def compute_obs_uncertainty(self, year):
+        unc_sic_name = 'unc_sic'
+        mesh_files = sorted(glob.glob(f'{self.mesh_dir}/{year}/mesh_*.zip'))
+        mesh_dates = [datetime.strptime(os.path.basename(mesh_file), 'mesh_%Y%m%d.zip') + timedelta(days=0.5) for mesh_file in mesh_files]
+        unc_files = [mesh_date.strftime(f'{self.unc_dir}/%Y/unc_%Y%m%d.zip') for mesh_date in mesh_dates]
+        print(f'Computing SIC uncertainty for {len(mesh_files)} mesh files for year {year}')
+        dst_dir = f'{self.unc_dir}/{year}'
+        os.makedirs(dst_dir, exist_ok=True)
+        for mesh_file, mesh_date, unc_file in zip(tqdm(mesh_files), mesh_dates, unc_files):
+            if unc_sic_name in get_file_arrays(unc_file):
+                continue
+            
+            sid_file = self.sid_files[self.sid_dates.index(mesh_date)]
+            # load SIC uncert from obs file
+            unc_sic_grd, x, y, t = self.load_sic_data(sid_file, mesh_file)
+            unc_sic_fil = fill_gaps(unc_sic_grd, np.isnan(unc_sic_grd), distance=144)
+            # interpolate uncertainty to mesh
+            unc_sic = RectBivariateSpline(self.xc, self.yc, unc_sic_fil[::-1], kx=1, ky=1)(y[t].mean(axis=1), x[t].mean(axis=1), grid=False)
+            # Save uncertainty
+            unc_mf = MeshFile(unc_file)
+            unc_mf.save({unc_sic_name: unc_sic.astype(np.float16)}, mode='a')
+
+    def compute_min_uncertainty(self, unc_sic_dates, start_idx):
+        stop_idx = min(start_idx + self.n_steps, len(unc_sic_dates))
+        sic_min = None
+        unc_sic_min = None
+        start_date = unc_sic_dates[start_idx]
+        unc_sic_name = f'unc_sic{start_date.year}'
+        sic_min_name = f'sic_min{start_date.year}'
+        sic_name = f'sic{start_date.strftime("%Y%m%d")}'
+
+        print(f'Computing uncertainty for {start_date.strftime("%Y%m%d")}, {unc_sic_dates[stop_idx-1]}')
+        for i in trange(start_idx, stop_idx):
+            unc_date = unc_sic_dates[i]
+            mesh_file = unc_date.strftime(f'{self.mesh_dir}/%Y/mesh_%Y%m%d.zip')
+            age_file = unc_date.strftime(f'{self.age_dir}/%Y/age_%Y%m%d.zip')
+            unc_file = unc_date.strftime(f'{self.unc_dir}/%Y/unc_%Y%m%d.zip')
+            # load precomputed min concentration and its uncertainty, skip the rest of processing
+            if unc_sic_name in get_file_arrays(unc_file):
+                unc_sic_min, sic_min = MeshFile(unc_file).load([unc_sic_name, sic_min_name], as_dict=False)
                 continue
 
-            mesh_file, _ = get_mesh_files(idate, self.mesh_dir, self.mesh_init_file)
-            unc_sic_grd, x, y, t, src2dst, weights, ar = self.load_sic_data(ifile, mesh_file)
-            unc_sic_fil = fill_gaps(unc_sic_grd, np.isnan(unc_sic_grd), distance=144)
-            
-            # interpolate SIC uncertainty to mesh
-            unc_sic = RectBivariateSpline(self.xc, self.yc, unc_sic_fil[::-1], kx=1, ky=1)(y[t].mean(axis=1), x[t].mean(axis=1), grid=False)
-            sic_file = mesh_file.replace('mesh', 'sic')
-            c = np.load(sic_file)['c']
-
-            if unc_sic_sum is None:
-                # first time step
-                unc_sic_sum = np.array(unc_sic)
-                sic_min = np.array(c)
+            # load obs concentration, uncertainty
+            sic = MeshFile(age_file).load([sic_name], as_dict=False)[0]
+            unc_sic = MeshFile(unc_file).load(['unc_sic'], as_dict=False)[0]
+            if unc_sic_min is None:
+                # first time step: initialize minimal concentration and its uncertainty
+                unc_sic_min = np.array(unc_sic)
+                sic_min = np.array(sic)
             else:
-                # advect unc_sic_sum (from previous time step)
-                unc_sic_sum_pro = np.zeros(src2dst[:,1].max()+1)
-                np.add.at(unc_sic_sum_pro, src2dst[:,1], unc_sic_sum[src2dst[:,0]] * weights)
-                unc_sic_sum_pro /= ar
-                unc_sic_sum_pro = np.clip(unc_sic_sum_pro, 0, 100)
-                
-                # advect sic_min from previous time step
-                sic_min_pro = np.zeros(src2dst[:,1].max()+1)
-                np.add.at(sic_min_pro, src2dst[:,1], sic_min[src2dst[:,0]] * weights)
-                sic_min_pro /= ar
-                sic_min_pro = np.clip(sic_min_pro, 0, 100)
+                # later steps: advect sic_min, unc_sic_min from previous time step
+                src2dst, weights = MeshFile(mesh_file).load(['src2dst', 'weights'], as_dict=False)
+                unc_sic_min_advected = np.zeros(src2dst[:,1].max()+1)
+                np.add.at(unc_sic_min_advected, src2dst[:,1], unc_sic_min[src2dst[:,0]] * weights)
+                sic_min_advected = np.zeros(src2dst[:,1].max()+1)
+                np.add.at(sic_min_advected, src2dst[:,1], sic_min[src2dst[:,0]] * weights)
+
+                # keep minimal value of SIC
+                sic_min = np.min([sic_min_advected, sic], axis=0)
 
                 # keep uncertainty of the minimal value of SIC
-                min_sic_ids = c < sic_min_pro
-                unc_sic_sum = unc_sic_sum_pro
-                unc_sic_sum[min_sic_ids] = unc_sic[min_sic_ids]
-                
-                # keep minimal ice concentration
-                sic_min = np.min([sic_min_pro, c], axis=0)
-            np.savez(ofile, unc_sic=unc_sic_sum.astype(np.float16), sic_min=sic_min.astype(np.float16))
-
-        #print(start_date)
-        #fig, axs = plt.subplots(1, 1, figsize=(6, 6))
-        #trp0 = axs.tripcolor(x, y, t, unc_sic_sum, cmap='jet')
-        #plt.colorbar(trp0, ax=axs)
-        #plt.show()            
+                min_sic_ids = sic < sic_min_advected
+                unc_sic_min = unc_sic_min_advected
+                unc_sic_min[min_sic_ids] = unc_sic[min_sic_ids]
+            
+            # Save minimal concentration and its uncertainty
+            MeshFile(unc_file).save({
+                    sic_min_name: sic_min.astype(np.float16),
+                    unc_sic_name: unc_sic_min.astype(np.float16),
+                 }, mode='a')
+        print('Done', start_date, unc_sic_dates[stop_idx-1])
 
 
 class ComputeSidUncertainty:
@@ -220,9 +230,9 @@ class ComputeSidUncertainty:
             unc_mf = MeshFile(unc_file)
             unc_mf.save({unc_sid_name: unc_sid.astype(np.float16)}, mode='a')
 
-    def compute_integrated_uncertainty(self, unc_sid_files, unc_sid_dates, start_idx):
+    def compute_integrated_uncertainty(self, unc_sid_dates, start_idx):
         """ Compute integrated drift uncertainty """
-        stop_idx = min(start_idx + self.n_steps, len(unc_sid_files))
+        stop_idx = min(start_idx + self.n_steps, len(unc_sid_dates))
         unc_sid_int = None
         start_date = unc_sid_dates[start_idx]
         unc_sid_name = f'unc_sid{start_date.year}'
