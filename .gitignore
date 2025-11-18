@@ -8,3 +8,10 @@
 *.feather
 .*.sw?
 data2
+*sqlite
+.vscode/
+.DS_Store
+.env
+NERSC_arctic25km_sea_ice_age_v2p1
+OSISAF_ice_drift_CDR_postproc
+zarr
