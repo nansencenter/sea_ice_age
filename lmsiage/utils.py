@@ -73,6 +73,8 @@ def advect_nodes(tri0, u0, v0, max_dist0):
         print('NEGATIVE AREA!')
     return Triangulation(x1, y1, tri0.triangles)
 
+# TODO:
+# Outdated function - remove later
 def get_mesh_files(idate, lag_dir, mesh_init_file):
     mesh_src_dir = idate.strftime(f'{lag_dir}/%Y')
     mesh_src_file = idate.strftime(f'{mesh_src_dir}/mesh_%Y%m%d.npz')
