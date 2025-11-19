@@ -13,86 +13,6 @@ from lmsiage.utils import fill_gaps
 from lmsiage.zarr_index import get_file_arrays
 
 
-def std_filter_using_windows(image, size=25):
-    """
-    Compute the standard deviation of an image using sliding windows.
-    """
-    pad_width = size // 2  # for 5x5 window
-    image_pad = np.pad(image, pad_width, mode='constant', constant_values=np.nan)
-
-    # Create a sliding window view of the image
-    windows = view_as_windows(image_pad, (size, size), step=1)
-    
-    # Compute the standard deviation for each window
-    std_image = np.nanstd(windows, axis=(2, 3))
-    
-    return std_image
-
-def compute_std(ifile, col, row):
-    myi = np.load(ifile)['c']
-    myi_grd = np.zeros((row.max() + 1, col.max() + 1)) + np.nan
-    myi_grd[row, col] = myi
-    std_grd = {}
-    std_sizes = list(range(3,31,3))
-    for size in std_sizes:
-        std_grd[size] = std_filter_using_windows(myi_grd, size=size).astype(np.float16)
-        std_grd[size][np.isnan(std_grd[size])] = 0
-    return std_grd
-
-
-class ComputeSidSicUncertainty:
-    def __init__(self, sia_dir):
-        self.sia_dir = sia_dir
-
-    def save_sid_sic_uncertainty(self, idate):
-        xel_min = -2000
-        yel_min = -2450
-        node_distance_mean = 30
-
-        afile = f'{self.sia_dir}/age/{idate.year}/age_{idate.strftime("%Y%m%d")}.npz'
-        if not os.path.exists(afile):
-            print(f'File {afile} does not exist.')
-            return
-        with np.load(afile) as ds:
-            x = ds['x']
-            y = ds['y']
-            t = ds['t'].astype(int)
-        xel = x[t].mean(axis=1)
-        yel = y[t].mean(axis=1)
-        col = ((xel  - xel_min) / 25).astype(int)
-        row = ((yel  - yel_min) / 25).astype(int)
-
-        ifiles = []
-        unc_sid_files = []
-        for i in range(7):
-            src_year = idate.year - i
-            ifile = f'{self.sia_dir}/sic/{src_year}/sic_{src_year}0915_{idate.strftime("%Y%m%d")}.npz'
-            unc_sid_file = f'{self.sia_dir}/unc/{src_year}/unc_sid_{src_year}0905_{idate.strftime("%Y%m%d")}.npz'
-
-            if os.path.exists(ifile) and os.path.exists(unc_sid_file):
-                ifiles.append(ifile)
-                unc_sid_files.append(unc_sid_file)
-
-        for ifile, unc_sid_file in zip(ifiles, unc_sid_files):
-            ofile = unc_sid_file.replace('unc_sid_', 'unc_sidsic_')
-            if os.path.exists(ofile):
-                continue
-            std_grd = compute_std(ifile, col, row)
-            unc_sid_sum = np.load(unc_sid_file)['unc_sid']
-            min_rel_size_factor = 3
-            min_rel_sizes = np.arange(3, 31, 3)
-            sid_unc_rel_to_el_size = unc_sid_sum / node_distance_mean
-            unc_sic_sid = np.zeros_like(unc_sid_sum)
-            for min_rel_size in min_rel_sizes:
-                uncert_elems = np.nonzero(sid_unc_rel_to_el_size > min_rel_size)[0]
-                if uncert_elems.size == 0:
-                    continue
-                col_unc_sid = col[uncert_elems]
-                row_unc_sid = row[uncert_elems]
-                unc_sic_sid[uncert_elems] = std_grd[min_rel_size][row_unc_sid, col_unc_sid]
-            np.savez(ofile, unc_sic_sid=unc_sic_sid.astype(np.float16))
-
-
 class ComputeSicUncertainty:
     def __init__(self, sid_files, sid_dates, mesh_dir, age_dir, unc_dir, n_steps, xc, yc):
         self.sid_files = sid_files
@@ -266,123 +186,128 @@ class ComputeSidUncertainty:
         print('Done', start_date, self.idates[stop_idx-1])
 
 
-
-class ComputeTotUncertainty:
-    def __init__(self, mesh_dir, unc_dir, sid_dir, age_dir, mesh_init_file):
+class ComputeAgeUncertainty:
+    def __init__(self, mesh_dir, age_dir, unc_dir):
         self.mesh_dir = mesh_dir
-        self.unc_dir = unc_dir
-        self.sid_dir = sid_dir
         self.age_dir = age_dir
-        self.mesh_init_file = mesh_init_file
+        self.unc_dir = unc_dir
 
-        self.xc = np.load(self.mesh_init_file)['xc']
-        self.yc = np.load(self.mesh_init_file)['yc']
+    def proc_unc_file(self, unc_file, save_names=('unc_age', 'unc_fracs')):
+        mesh_file, age_file, unc_file = self.get_files(unc_file)
+        self.load_data(mesh_file, age_file, unc_file)
+        self.compute()
+        self.save(unc_file, save_names)
+    
+    def get_files(self, unc_file):
+        date = datetime.strptime(os.path.basename(unc_file), 'unc_%Y%m%d.zip')
+        mesh_file = date.strftime(f'{self.mesh_dir}/%Y/mesh_%Y%m%d.zip')
+        age_file = date.strftime(f'{self.age_dir}/%Y/age_%Y%m%d.zip')
+        return mesh_file, age_file, unc_file
 
-    def load_age(self, idate):
-        age_file = f'{self.age_dir}/{idate.year}/age_{idate.year}{idate.month:02d}{idate.day:02d}.npz'
-        with np.load(age_file) as ds:
-            a = ds['a']
-            c = ds['c']
-            f = ds['f']
-            x = ds['x']
-            y = ds['y']
-            t = ds['t'].astype(int)
-        return a, c, f, x, y, t
+    def load_data(self, mesh_file, age_file, unc_file, xel_min=-2000, yel_min=-2450):
+        """ Load mesh, age, and uncertainty data from files."""
+        x, y, t = MeshFile(mesh_file).load(['x', 'y', 't'], as_dict=False)
+        xel = x[t].mean(axis=1)
+        yel = y[t].mean(axis=1)
+        self.col = ((xel  - xel_min) / 25).astype(int)
+        self.row = ((yel  - yel_min) / 25).astype(int)
 
-    def load_unc_obs(self, idate):
-        ifile = sorted(glob.glob(f'{self.sid_dir}/{idate.year}/ice_drift*{idate.strftime("%Y%m%d")}*.npz'))[0]
-        unc_sic_grd = np.load(ifile)['sic_unc']
-        unc_sic_fil = fill_gaps(unc_sic_grd, np.isnan(unc_sic_grd), 100)
-        unc_sic_fil[np.isnan(unc_sic_fil)] = 0
-        a, c, f, x, y, t = self.load_age(idate)
-        unc_obs = RectBivariateSpline(self.xc, self.yc, unc_sic_fil[::-1], kx=1, ky=1)(y[t].mean(axis=1), x[t].mean(axis=1), grid=False)
-        return unc_obs, len(f)
+        unc_names = MeshFile(unc_file).read_names()
+        self.unc_years = sorted([n[7:] for n in unc_names if 'unc_sid' in n and len(n) > 7])
+        self.sic_myi = {}
+        self.unc_myi = {}
+        self.unc_sid = {}
+        for uy in self.unc_years:
+            self.sic_myi[uy], self.fracs = MeshFile(age_file).load([f'sic{uy}0915', 'f'], as_dict=False)
+            self.unc_sic, self.unc_myi[uy], self.unc_sid[uy] = MeshFile(unc_file).load(['unc_sic', f'unc_sic{uy}', f'unc_sid{uy}'], as_dict=False)
 
-    def get_unc_sic_files(self, idate):
-        unc_sic_files = []
-        for i in range(7):
-            if i == 0 and idate.month == 9 and idate.day < 15:
+    def compute(self):
+        # compute all uncertainties
+        self.std_grd = {}
+        self.unc_sic_sid = {}
+        self.unc_com = {}
+        # TODO: parallelize this loop
+        for uy in self.unc_years:
+            self.std_grd[uy] = self.compute_std_grids(uy)
+            self.unc_sic_sid[uy] = self.compute_sid_sic_uncert(uy)
+            self.unc_com[uy] = np.sqrt(self.unc_myi[uy]**2 + self.unc_sic_sid[uy]**2)
+        self.unc_fracs = self.compute_fraction_uncertainties()
+        self.unc_age = self.compute_age_uncertainty()
+
+    def compute_std_grids(self, uy, min_size=3, max_size=31, step=3):
+        """ Compute standard deviation grids for multiple window sizes."""
+        myi_grd = np.zeros((self.row.max() + 1, self.col.max() + 1)) + np.nan
+        myi_grd[self.row, self.col] = self.sic_myi[uy]
+        std_grd = {}
+        std_sizes = list(range(min_size, max_size, step))
+        for size in std_sizes:
+            std_grd[size] = self.std_filter_using_windows(myi_grd, size=size).astype(np.float16)
+            std_grd[size][np.isnan(std_grd[size])] = 0
+        return std_grd
+
+    def std_filter_using_windows(self, image, size=25):
+        """ Compute the standard deviation of an image using sliding windows. """
+        pad_width = size // 2  # for 5x5 window
+        image_pad = np.pad(image, pad_width, mode='constant', constant_values=np.nan)
+        # Create a sliding window view of the image
+        windows = view_as_windows(image_pad, (size, size), step=1)
+        # Compute the standard deviation for each window
+        std_image = np.nanstd(windows, axis=(2, 3))
+        return std_image
+
+    def compute_sid_sic_uncert(self, uy, node_distance_mean=30, min_size=3, max_size=31, step=3):
+        """ Select standard deviation values based on relative element sizes."""
+        min_rel_sizes = np.arange(min_size, max_size, step)
+        sid_unc_rel_to_el_size = self.unc_sid[uy] / node_distance_mean
+        unc_sic_sid = np.zeros_like(self.unc_sid[uy])
+        for min_rel_size in min_rel_sizes:
+            uncert_elems = np.nonzero(sid_unc_rel_to_el_size > min_rel_size)[0]
+            if uncert_elems.size == 0:
                 continue
-            src_year = idate.year - i
-            unc_sic_file = f'{self.unc_dir}/{src_year}/unc_sic_{src_year}0905_{idate.year}{idate.month:02d}{idate.day:02d}.npz'
-            if os.path.exists(unc_sic_file):
-                unc_sic_files.append(unc_sic_file)
-        return unc_sic_files
+            col_unc_sid = self.col[uncert_elems]
+            row_unc_sid = self.row[uncert_elems]
+            unc_sic_sid[uncert_elems] = self.std_grd[uy][min_rel_size][row_unc_sid, col_unc_sid]
+        return unc_sic_sid
 
-    def load_unc_myi(self, idate):
-        unc_sic_files = self.get_unc_sic_files(idate)    
-        unc_myi = []
-        for unc_sic_file in unc_sic_files:
-            with np.load(unc_sic_file) as ds:
-                unc_myi.append(ds['unc_sic'])
-        return unc_myi
+    def compute_fraction_uncertainties(self):
+        """ Compute fractional uncertainties for all source year combinations."""
+        source_years = [(self.unc_years[0],)]
+        source_years += list(zip(self.unc_years[:-1], self.unc_years[1:]))
+        unc_fracs = []
+        for i, src_years in enumerate(source_years):
+            unc_frac = 0
+            for year in src_years:
+                unc_frac += self.unc_com[year]**2
+            unc_fracs.append(np.sqrt(unc_frac))
+        unc_fracs.append(np.hypot(self.unc_com[self.unc_years[-1]], self.unc_sic))
+        return np.array(unc_fracs)
 
-    def get_unc_sid_files(self, idate):
-        unc_sid_files = []
-        for i in range(7):
-            src_year = idate.year - i
-            unc_sid_file = f'{self.unc_dir}/{src_year}/unc_sid_{src_year}0905_{idate.year}{idate.month:02d}{idate.day:02d}.npz'
-            if os.path.exists(unc_sid_file):
-                unc_sid_files.append(unc_sid_file)
-        return unc_sid_files
+    def compute_age_uncertainty(self):
+        """ Compute age uncertainties from fractional uncertainties and fractions."""
+        ages_vec = (1 + np.arange(len(self.unc_fracs), dtype=np.float32)[::-1])[:, None]
 
-    def load_unc_sid(self, idate, unc_obs):
-        unc_sid_files = self.get_unc_sid_files(idate)
-        unc_sid = [np.zeros_like(unc_obs)]
-        for unc_sid_file in unc_sid_files:
-            with np.load(unc_sid_file) as ds:
-                unc_sid.append(ds['unc_sid'])
-        return unc_sid
-    
-    def get_unc_sidsic_files(self, idate):
-        unc_sid_files = []
-        for i in range(7):
-            src_year = idate.year - i
-            unc_sid_file = f'{self.unc_dir}/{src_year}/unc_sidsic_{src_year}0905_{idate.year}{idate.month:02d}{idate.day:02d}.npz'
-            if os.path.exists(unc_sid_file):
-                unc_sid_files.append(unc_sid_file)
-        return unc_sid_files
-    
-    def load_unc_sidsic(self, idate, unc_obs):
-        unc_sid_files = self.get_unc_sidsic_files(idate)
-        unc_sidsic = [np.zeros_like(unc_obs)]
-        for unc_sid_file in unc_sid_files:
-            with np.load(unc_sid_file) as ds:
-                unc_sidsic.append(ds['unc_sic_sid'])
-        return unc_sidsic
+        sigma_x = np.sum(ages_vec * self.unc_fracs ** 2, axis=0)
+        sigma_y = np.sum(self.unc_fracs ** 2, axis=0)
+        x_ = np.sum(ages_vec * self.fracs, axis=0)
+        y_ = np.sum(self.fracs, axis=0)
 
-    def compute_unc_frac(self, unc_obs, unc_myi, len_f):
-        unc_fyi = np.hypot(unc_obs, unc_myi[0])
-        unc_frac = [unc_fyi]
-        for i in range(len_f-1):
-            unc_square_sum = 0
-            for j in range(min(i+2, len(unc_myi))):
-                unc_square_sum += unc_myi[j]**2
-            unc_frac.append(np.sqrt(unc_square_sum))
-        return unc_frac
+        x_[y_ < 1] = np.nan
+        y_[y_ < 1] = np.nan
 
-    def compute_unc_tot(self, unc_frac, unc_sic_sid):
-        unc_tot = []
-        unc_age = 0
-        for i in range(len(unc_frac)):
-            try:
-                unc_tot.append(np.hypot(unc_frac[i], unc_sic_sid[i]))
-            except IndexError:
-                return None, None
-            unc_age += (i * unc_tot[i]/100)**2
-        unc_age = np.sqrt(unc_age)
-        return unc_tot, unc_age
+        sigma_x_by_x = np.sqrt(sigma_x / x_)
+        sigma_y_by_y = np.sqrt(sigma_y / y_)
 
-    def compute_uncertainty(self, idate):
-        unc_tot_file = f'{self.unc_dir}/{idate.year}/unc_tot_{idate.year}{idate.month:02d}{idate.day:02d}.npz'
-        if os.path.exists(unc_tot_file):
-            return
-        unc_obs, len_f = self.load_unc_obs(idate)
-        unc_myi = self.load_unc_myi(idate)
-        unc_sidsic = self.load_unc_sidsic(idate, unc_obs)
-        unc_frac = self.compute_unc_frac(unc_obs, unc_myi, len_f)
-        unc_tot, unc_age = self.compute_unc_tot(unc_frac, unc_sidsic)
-        if unc_tot is None:
-            print(f'Uncertainty for {idate.strftime("%Y%m%d")} is None')
-            raise
-        np.savez(unc_tot_file, unc_tot=np.array(unc_tot).astype(np.float16), unc_age=unc_age.astype(np.float16))
+        unc_age = np.hypot(sigma_x_by_x, sigma_y_by_y)
+        unc_age[np.isnan(unc_age)] = 0
+        return unc_age
+
+    def save(self, unc_file, save_names):
+        data = {}
+        for i in save_names:
+            if isinstance(self.__dict__[i], dict):
+                save_items = {f'{i}{k}': self.__dict__[i][k] for k in self.__dict__[i]}
+            else:
+                save_items = {i: self.__dict__[i] }
+            data.update(save_items)
+        mf = MeshFile(unc_file)
+        mf.save(data, mode='o')
