@@ -15,6 +15,64 @@ from lmsiage.zarr_index import get_file_arrays
 
 warnings.filterwarnings('ignore')
 
+class ComputeObsUncertainty:
+    def __init__(self, obs_files, obs_dates, mesh_dir, unc_dir, xc, yc, size=3):
+        self.obs_files = obs_files
+        self.obs_dates = obs_dates
+        self.mesh_dir = mesh_dir
+        self.unc_dir = unc_dir
+        self.xc = xc
+        self.yc = yc
+        self.size = size
+
+    def load_data(self, obs_file, mesh_file):
+        with np.load(obs_file) as d:
+            sic_unc = d['sic_unc']
+            sid_unc = d['sid_unc']
+        
+        mf = MeshFile(mesh_file)
+        x, y, t = mf.load(['x', 'y', 't'], as_dict=False)
+        return sic_unc, sid_unc, x, y, t
+
+    def compute_obs_uncertainty(self, year):
+        mesh_files = sorted(glob.glob(f'{self.mesh_dir}/{year}/mesh_*.zip'))
+        mesh_dates = [datetime.strptime(os.path.basename(mesh_file), 'mesh_%Y%m%d.zip') + timedelta(days=0.5) for mesh_file in mesh_files]
+        unc_files = [mesh_date.strftime(f'{self.unc_dir}/%Y/unc_%Y%m%d.zip') for mesh_date in mesh_dates]
+        print(f'Computing OBS uncertainty for {len(mesh_files)} mesh files for year {year}')
+        dst_dir = f'{self.unc_dir}/{year}'
+        os.makedirs(dst_dir, exist_ok=True)
+
+        unc_sic_name = 'unc_sic'
+        unc_sid_name = 'unc_sid'
+
+        for mesh_file, mesh_date, unc_file in zip(tqdm(mesh_files), mesh_dates, unc_files):
+            file_arrays = get_file_arrays(unc_file)
+            if unc_sic_name in file_arrays and unc_sid_name in file_arrays:
+                continue
+            
+            obs_file = self.obs_files[self.obs_dates.index(mesh_date)]
+            # load SIC and SID uncert from obs file
+            unc_sic_grd, unc_sid_grd, x, y, t = self.load_data(obs_file, mesh_file)
+
+            # process SIC uncertainty
+            unc_sic_fil = fill_gaps(unc_sic_grd, np.isnan(unc_sic_grd), distance=144)
+            unc_sic = RectBivariateSpline(self.xc, self.yc, unc_sic_fil[::-1], kx=1, ky=1)(y[t].mean(axis=1), x[t].mean(axis=1), grid=False)
+
+            # process SID uncertainty to mesh
+            unc_sid_fil = fill_gaps(unc_sid_grd, np.isnan(unc_sid_grd), distance=144)
+            # compute uncertainty of drift field after smoothing
+            unc_sid_smt = uniform_filter(unc_sid_fil**2, size=self.size) / self.size
+            unc_sid_smt[np.isnan(unc_sid_grd)] = 0
+            unc_sid = RectBivariateSpline(self.xc[1:-1:3], self.yc[1:-1:3], unc_sid_smt[::-1], kx=1, ky=1)(y[t].mean(axis=1), x[t].mean(axis=1), grid=False)
+
+            # Save uncertainty
+            unc_mf = MeshFile(unc_file)
+            unc_mf.save({
+                unc_sic_name: unc_sic.astype(np.float16),
+                unc_sid_name: unc_sid.astype(np.float16),
+                }, mode='a')
+
+
 class ComputeSicUncertainty:
     def __init__(self, sid_files, sid_dates, mesh_dir, age_dir, unc_dir, n_steps, xc, yc):
         self.sid_files = sid_files
