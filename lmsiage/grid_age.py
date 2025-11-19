@@ -6,68 +6,59 @@ from geodataset.geodataset import GeoDatasetWrite
 import numpy as np
 import pyproj
 
-from .utils import IrregularGridInterpolator
+from lmsiage.utils import IrregularGridInterpolator
+from lmsiage.mesh_file import MeshFile
+from lmsiage.zarr_index import get_file_arrays
 
 class GridAge:
-    def __init__(self, xgrd, ygrd, mask, force=False):
+    def __init__(self, mesh_dir, age_dir, unc_dir, grid_dir, xgrd, ygrd, mask, force=False):
+        self.mesh_dir = mesh_dir
+        self.age_dir = age_dir
+        self.unc_dir = unc_dir
+        self.grid_dir = grid_dir
         self.xgrd = xgrd
         self.ygrd = ygrd
         self.mask = mask
         self.force = force
 
-    def __call__(self, age_file):
-        age_grd_file = age_file.replace('.npz', '_grd.npz').replace('/age/', '/age_grd/')
-        unc_file = age_file.replace('/age/', '/unc/').replace('/age_', '/unc_tot_')
-        if os.path.exists(age_grd_file) and not self.force:
+    def load_data(self, mesh_file, age_file, unc_file):
+        """ Load mesh, age, and uncertainty data from files."""
+        self.x, self.y, self.t = MeshFile(mesh_file).load(['x', 'y', 't'], as_dict=False)
+        self.age, self.fracs, = MeshFile(age_file).load(['age', 'f'], as_dict=False)
+        self.unc_age, self.unc_fracs, = MeshFile(unc_file).load(['unc_age', 'unc_fracs'], as_dict=False)
+
+    def __call__(self, unc_file):
+        """ Load, interpolate, save grid """
+        date = datetime.strptime(os.path.basename(unc_file), 'unc_%Y%m%d.zip')
+        mesh_file = date.strftime(f'{self.mesh_dir}/%Y/mesh_%Y%m%d.zip')
+        age_file = date.strftime(f'{self.age_dir}/%Y/age_%Y%m%d.zip')
+        grid_dir = date.strftime(f'{self.grid_dir}/%Y')
+        grid_file = date.strftime(f'{grid_dir}/grid_%Y%m%d.zip')
+        
+        file_arrays = get_file_arrays(grid_file)
+        if 'age' in file_arrays and not self.force:
             return
-        try:
-            with np.load(age_file) as data:
-                t = data['t']
-                x = data['x']
-                y = data['y']
-                a = data['a']
-                f = data['f']
-        except:
-            raise ValueError(f'Cannot load from {age_file}')
-        
-        try:
-            with np.load(unc_file) as data:                
-                unc_tot = data['unc_tot']
-                unc_age = data['unc_age']
-        except:
-            raise ValueError(f'Cannot load from {unc_file}')
 
-        try:
-            igi = IrregularGridInterpolator(x, y, self.xgrd, self.ygrd, t)
-        except:
-            raise ValueError(f'Cannot create IGI {age_file}')
-
-        src_data = np.vstack([a[None], f, unc_age[None], unc_tot[:len(f)]])
-        dst_data = []
-        for d in src_data:
-            try:
-                dgrd = igi.interp_field(d)
-            except:
-                import ipdb; ipdb.set_trace()
-                raise ValueError(f'Cannot interpolate {age_file}')
-            dgrd[self.mask == 0] = np.nan
-            dst_data.append(dgrd.astype(np.float32))
-        
-        frac_num = len(f)
+        self.load_data(mesh_file, age_file, unc_file)
+        igi = IrregularGridInterpolator(self.x, self.y, self.xgrd, self.ygrd, self.t)
+        src_data = np.vstack([self.age[None], self.fracs, self.unc_age[None], self.unc_fracs])
+        frac_num = len(self.fracs)
         save_data_names = (
             ['age'] + 
-            [f'fraction_{frac_num - i}yi' for i in range(frac_num)] +
-            ['age_unc'] + 
-            [f'fraction_{i}yi_unc' for i in range(1, len(f) + 1)]
+            [f'sic_{frac_num - i}yi' for i in range(frac_num)] +
+            ['unc_age'] + 
+            [f'unc_{frac_num - i}yi' for i in range(frac_num)]
         )
-        if len(dst_data) != len(save_data_names):
-            raise ValueError(f'Length mismatch: {len(dst_data)} != {len(save_data_names)} for {age_file}')
-        save_data = {}
-        for i, name in enumerate(save_data_names):
-            save_data[name] = dst_data[i]
-        dst_date_dir = os.path.split(age_grd_file)[0]
-        os.makedirs(dst_date_dir, exist_ok=True)
-        np.savez_compressed(age_grd_file, **save_data)
+        dst_data = {}
+        for d, name in zip(src_data, save_data_names):
+            dgrd = igi.interp_field(d)
+            dgrd[self.mask == 0] = np.nan
+            dst_data[name] = dgrd.astype(np.float16)
+
+        os.makedirs(grid_dir, exist_ok=True)
+        mf = MeshFile(grid_file)
+        mf.save(dst_data)
+
 
 class SeaIceAgeDataset(GeoDatasetWrite):
     """ wrapper for netCDF4.Dataset with info about Ice Age products """
