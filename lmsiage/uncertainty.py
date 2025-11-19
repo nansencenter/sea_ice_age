@@ -1,6 +1,7 @@
 import glob
 from datetime import datetime, timedelta
 import os
+import warnings
 
 import numpy as np
 from scipy.interpolate import RectBivariateSpline
@@ -12,6 +13,7 @@ from lmsiage.mesh_file import MeshFile
 from lmsiage.utils import fill_gaps
 from lmsiage.zarr_index import get_file_arrays
 
+warnings.filterwarnings('ignore')
 
 class ComputeSicUncertainty:
     def __init__(self, sid_files, sid_dates, mesh_dir, age_dir, unc_dir, n_steps, xc, yc):
@@ -195,8 +197,12 @@ class ComputeAgeUncertainty:
     def proc_unc_file(self, unc_file, save_names=('unc_age', 'unc_fracs')):
         mesh_file, age_file, unc_file = self.get_files(unc_file)
         self.load_data(mesh_file, age_file, unc_file)
+        if len(self.unc_years) == 0:
+            print(f'No uncertainty years found in {unc_file}, skipping')
+            return -1
         self.compute()
         self.save(unc_file, save_names)
+        return 0
     
     def get_files(self, unc_file):
         date = datetime.strptime(os.path.basename(unc_file), 'unc_%Y%m%d.zip')

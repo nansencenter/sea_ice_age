@@ -63,7 +63,7 @@ def files_missing_array(array_name: str):
         subq = select(Array.path).where(Array.array_name == array_name) #.subquery()
         q = select(File.path).where(~File.path.in_(subq))
         res = session.execute(q).scalars().all()
-    return res
+    return sorted(res)
 
 def files_with_array(array_name: str):
     """
