@@ -104,11 +104,17 @@ class ComputeIntegratedUncertainty:
             mesh_file = unc_date.strftime(f'{self.mesh_dir}/%Y/mesh_%Y%m%d.zip')
             age_file = unc_date.strftime(f'{self.age_dir}/%Y/age_%Y%m%d.zip')
             unc_file = unc_date.strftime(f'{self.unc_dir}/%Y/unc_%Y%m%d.zip')
-            # load precomputed min concentration and its uncertainty, skip the rest of processing
+            
             file_arrays = get_file_arrays(unc_file)
             if unc_sic_name in file_arrays and unc_sid_name in file_arrays:
+                # load precomputed min concentration and its uncertainty, skip the rest of processing
                 sic_min, unc_sic_min, unc_sid_int = MeshFile(unc_file).load([sic_min_name, unc_sic_name, unc_sid_name], as_dict=False)
                 continue
+            
+            age_arrays = get_file_arrays(age_file)
+            if sic_name not in age_arrays:
+                # no sic data for this date, stop processing
+                break
 
             # load obs concentration, uncertainty
             sic = MeshFile(age_file).load([sic_name], as_dict=False)[0]
