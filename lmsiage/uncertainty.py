@@ -165,7 +165,7 @@ class ComputeAgeUncertainty:
         self.save_names = save_names
         self.force = force
 
-    def __call__(self, unc_file, ):
+    def __call__(self, unc_file):
         """ Process a single uncertainty file to compute age uncertainty."""
         mesh_file, age_file, unc_file = self.get_files(unc_file)
         status = self.load_data(mesh_file, age_file, unc_file)
@@ -214,7 +214,6 @@ class ComputeAgeUncertainty:
         self.std_grd = {}
         self.unc_sic_sid = {}
         self.unc_com = {}
-        # TODO: parallelize this loop
         for uy in self.unc_years:
             self.std_grd[uy] = self.compute_std_grids(uy)
             self.unc_sic_sid[uy] = self.compute_sid_sic_uncert(uy)
