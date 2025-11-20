@@ -16,6 +16,7 @@ from lmsiage.zarr_index import get_file_arrays
 warnings.filterwarnings('ignore')
 
 class ComputeObsUncertainty:
+    """ Compute observation uncertainties of SIC and SID mapped to mesh grid."""
     def __init__(self, obs_files, obs_dates, mesh_dir, unc_dir, xc, yc, size=3):
         self.obs_files = obs_files
         self.obs_dates = obs_dates
@@ -26,6 +27,7 @@ class ComputeObsUncertainty:
         self.size = size
 
     def load_data(self, obs_file, mesh_file):
+        """ Load SIC and SID uncertainty from observation file and mesh grid info from mesh file."""
         with np.load(obs_file) as d:
             sic_unc = d['sic_unc']
             sid_unc = d['sid_unc']
@@ -35,6 +37,7 @@ class ComputeObsUncertainty:
         return sic_unc, sid_unc, x, y, t
 
     def compute_obs_uncertainty(self, year):
+        """ Compute observation uncertainties of SIC and SID mapped to mesh grid for a given year."""
         mesh_files = sorted(glob.glob(f'{self.mesh_dir}/{year}/mesh_*.zip'))
         mesh_dates = [datetime.strptime(os.path.basename(mesh_file), 'mesh_%Y%m%d.zip') + timedelta(days=0.5) for mesh_file in mesh_files]
         unc_files = [mesh_date.strftime(f'{self.unc_dir}/%Y/unc_%Y%m%d.zip') for mesh_date in mesh_dates]
@@ -81,6 +84,7 @@ class ComputeIntegratedUncertainty:
         self.unc_dir = unc_dir
 
     def compute(self, unc_sic_dates, start_idx):
+        """ Compute integrated uncertainties over n_steps starting from start_idx."""
         # init integrated uncerts
         sic_min = None
         unc_sic_min = None
@@ -147,22 +151,26 @@ class ComputeIntegratedUncertainty:
 
 
 class ComputeAgeUncertainty:
-    def __init__(self, mesh_dir, age_dir, unc_dir):
+    """ Compute sea ice age uncertainty from sea ice concentration and sea ice drift uncertainties."""
+    def __init__(self, mesh_dir, age_dir, unc_dir, save_names=('unc_age', 'unc_fracs'), force=False):
         self.mesh_dir = mesh_dir
         self.age_dir = age_dir
         self.unc_dir = unc_dir
+        self.save_names = save_names
+        self.force = force
 
-    def proc_unc_file(self, unc_file, save_names=('unc_age', 'unc_fracs')):
+    def __call__(self, unc_file, ):
+        """ Process a single uncertainty file to compute age uncertainty."""
         mesh_file, age_file, unc_file = self.get_files(unc_file)
-        self.load_data(mesh_file, age_file, unc_file)
-        if len(self.unc_years) == 0:
-            print(f'No uncertainty years found in {unc_file}, skipping')
-            return -1
+        status = self.load_data(mesh_file, age_file, unc_file)
+        if status < 0:
+            return status
         self.compute()
-        self.save(unc_file, save_names)
+        self.save(unc_file)
         return 0
     
     def get_files(self, unc_file):
+        """ Get corresponding mesh and age files for a given uncertainty file."""
         date = datetime.strptime(os.path.basename(unc_file), 'unc_%Y%m%d.zip')
         mesh_file = date.strftime(f'{self.mesh_dir}/%Y/mesh_%Y%m%d.zip')
         age_file = date.strftime(f'{self.age_dir}/%Y/age_%Y%m%d.zip')
@@ -176,17 +184,27 @@ class ComputeAgeUncertainty:
         self.col = ((xel  - xel_min) / 25).astype(int)
         self.row = ((yel  - yel_min) / 25).astype(int)
 
-        unc_names = MeshFile(unc_file).read_names()
+        unc_names = get_file_arrays(unc_file)
         self.unc_years = sorted([n[7:] for n in unc_names if 'unc_sid' in n and len(n) > 7])
+        if len(self.unc_years) == 0:
+            # no uncertainty years found
+            return -1
+        
+        save_names_in_file = all(name in unc_names for name in self.save_names)
+        if save_names_in_file and not self.force:
+            # all data already computed
+            return -2
+        
         self.sic_myi = {}
         self.unc_myi = {}
         self.unc_sid = {}
         for uy in self.unc_years:
             self.sic_myi[uy], self.fracs = MeshFile(age_file).load([f'sic{uy}0915', 'f'], as_dict=False)
             self.unc_sic, self.unc_myi[uy], self.unc_sid[uy] = MeshFile(unc_file).load(['unc_sic', f'unc_sic{uy}', f'unc_sid{uy}'], as_dict=False)
+        return 0
 
     def compute(self):
-        # compute all uncertainties
+        """ Compute all uncertainties."""
         self.std_grd = {}
         self.unc_sic_sid = {}
         self.unc_com = {}
@@ -247,27 +265,26 @@ class ComputeAgeUncertainty:
         return np.array(unc_fracs)
 
     def compute_age_uncertainty(self):
-        """ Compute age uncertainties from fractional uncertainties and fractions."""
+        """ Compute age uncertainties from fractional uncertainties and fractions.
+        (sigma_q / q)^2 = (sigma_x / x^2) + (sigma_y / y^2)
+        where x = sum(ages_vec * fracs), y = sum(fracs)
+        """
         ages_vec = (1 + np.arange(len(self.unc_fracs), dtype=np.float32)[::-1])[:, None]
 
         sigma_x = np.sum(ages_vec * self.unc_fracs ** 2, axis=0)
         sigma_y = np.sum(self.unc_fracs ** 2, axis=0)
         x_ = np.sum(ages_vec * self.fracs, axis=0)
         y_ = np.sum(self.fracs, axis=0)
-
         x_[y_ < 1] = np.nan
         y_[y_ < 1] = np.nan
-
-        sigma_x_by_x = np.sqrt(sigma_x / x_)
-        sigma_y_by_y = np.sqrt(sigma_y / y_)
-
-        unc_age = np.hypot(sigma_x_by_x, sigma_y_by_y)
+        unc_age = np.sqrt(sigma_x / x_**2 + sigma_y / y_**2) * x_ / y_
         unc_age[np.isnan(unc_age)] = 0
         return unc_age
 
-    def save(self, unc_file, save_names):
+    def save(self, unc_file):
+        """ Save computed uncertainties to file."""
         data = {}
-        for i in save_names:
+        for i in self.save_names:
             if isinstance(self.__dict__[i], dict):
                 save_items = {f'{i}{k}': self.__dict__[i][k] for k in self.__dict__[i]}
             else:

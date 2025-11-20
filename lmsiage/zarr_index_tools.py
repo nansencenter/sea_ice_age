@@ -80,6 +80,23 @@ def files_with_array(array_name: str):
         res = session.execute(q).scalars().all()
     return sorted(res)
 
+def files_with_arrays(array_names: list):
+    """
+    Return list of file paths that contain ALL of the given array_names.
+    """
+    init_db()
+    with get_session() as session:
+        from sqlalchemy import select, func
+        q = (
+            select(File.path)
+            .join(Array, File.path == Array.path)
+            .where(Array.array_name.in_(array_names))
+            .group_by(File.path)
+            .having(func.count(func.distinct(Array.array_name)) == len(array_names))
+        )
+        res = session.execute(q).scalars().all()
+    return sorted(res)
+
 def cleanup_missing_files():
     """
     Remove File (and related Array) entries for files that no longer exist on disk.
