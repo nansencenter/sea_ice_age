@@ -253,15 +253,15 @@ class ComputeAgeUncertainty:
 
     def compute_fraction_uncertainties(self):
         """ Compute fractional uncertainties for all source year combinations."""
-        source_years = [(self.unc_years[0],)]
-        source_years += list(zip(self.unc_years[:-1], self.unc_years[1:]))
-        unc_fracs = []
-        for i, src_years in enumerate(source_years):
-            unc_frac = 0
-            for year in src_years:
-                unc_frac += self.unc_com[year]**2
-            unc_fracs.append(np.sqrt(unc_frac))
-        unc_fracs.append(np.hypot(self.unc_com[self.unc_years[-1]], self.unc_sic))
+        # uncerts of advected MYI as a list sorted by year
+        # min of advected
+        unc_myi = [self.unc_myi[key] for key in sorted(self.unc_myi.keys())]
+        # combined
+        unc_com = [self.unc_com[key] for key in sorted(self.unc_com.keys())]
+        # uncerts of ice age fractions
+        # sigma_NYI^2 = sigma_COM,N-2^2 + sigma_COM,N-1^2
+        # sigma_FYI^2 = sigma_MYI,N-1^2 + sigma_SIC^2
+        unc_fracs = [unc_com[0]] + [np.hypot(unc_com[i], unc_com[i+1]) for i in range(len(unc_com) - 1)] + [np.hypot(unc_myi[-1], self.unc_sic)]
         return np.array(unc_fracs)
 
     def compute_age_uncertainty(self):

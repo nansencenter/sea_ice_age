@@ -222,7 +222,7 @@ class ExportNetcdf:
             comment = 'Uncertainty is computed based on observational and model errors.',
             units = "years",
             valid_min = np.float32(0),
-            valid_max = np.float32(20),
+            valid_max = np.float32(21),
             coverage_content_type = "modelResult",
         )
 
@@ -231,7 +231,7 @@ class ExportNetcdf:
             name = "conc_$YEAR$yi",
             units = "1",
             valid_min = np.float32(0),
-            valid_max = np.float32(1),
+            valid_max = np.float32(1.1),
             ancillary_variables = "conc_$YEAR$yi_uncertainty status_flag",
             coverage_content_type = "modelResult",
             standard_name='sea_ice_area_fraction',
@@ -243,7 +243,7 @@ class ExportNetcdf:
             name = "conc_$YEAR$yi_uncertainty",
             units = "1",
             valid_min = np.float32(0),
-            valid_max = np.float32(1),
+            valid_max = np.float32(1.1),
             coverage_content_type = "modelResult",
         )
 
@@ -265,7 +265,7 @@ class ExportNetcdf:
         self.numerals = [None, 'first', 'second', 'third', 'fourth', 'fifth', 'sixth', 'seventh', 'eighth']
 
     def __call__(self, age_grd_file):
-        age_grd_date = datetime.strptime(os.path.basename(age_grd_file).split('_')[1], '%Y%m%d')
+        age_grd_date = datetime.strptime(os.path.basename(age_grd_file), 'grid_%Y%m%d.zip')
         dst_dir = age_grd_date.strftime(f'{self.dst_root_dir}/%Y')
         os.makedirs(dst_dir, exist_ok=True)
         dst_file = age_grd_date.strftime(f'{dst_dir}/arctic25km_sea_ice_age_v2p1_%Y%m%d.nc')
@@ -279,7 +279,7 @@ class ExportNetcdf:
             time_data = np.array([time_value], float)
             time_bnds_data = np.array([time_value, time_value+86400*30], float)[None]
 
-        age_grd = dict(np.load(age_grd_file))
+        age_grd = MeshFile(age_grd_file).load()
         age_grd_vars = list(age_grd.keys())
         status_flag = self.status_flag.copy()
         status_flag[(self.status_flag == 0) * np.isnan(age_grd['age'])] = 2
@@ -298,26 +298,31 @@ class ExportNetcdf:
             tbvar[:] = time_bnds_data
 
             ds.set_variable('sea_ice_age', age_grd['age'], ('time', 'y', 'x'), self.age_atts, dtype=np.float32)
-            ds.set_variable('sea_ice_age_uncertainty', age_grd['age_unc'], ('time', 'y', 'x'), self.age_unc_atts, dtype=np.int16, pack=dict(scale_factor=0.001, add_offset=0.0))
+            unc_age_masked = np.ma.masked_array(age_grd['unc_age'], mask=np.isnan(age_grd['age']))
+            unc_age_masked = np.clip(unc_age_masked, 0., 20.)
+            ds.set_variable('sea_ice_age_uncertainty', unc_age_masked, ('time', 'y', 'x'), self.age_unc_atts, dtype=np.int16, pack=dict(scale_factor=0.001, add_offset=0.0))
 
             for age_grd_var in sorted(age_grd_vars):
-                if 'fraction' in age_grd_var:
+                if age_grd_var.endswith('yi'):
+                    if age_grd_var.startswith('sic_'):
+                        use_attributes = self.conc_atts.items()
+                    elif age_grd_var.startswith('unc_'):
+                        use_attributes = self.conc_unc_atts.items()
+
+                    dtype = np.int16
+                    pack = dict(scale_factor=0.001, add_offset=0.0)
+                    output_array = age_grd[age_grd_var][None]/100.
+                    output_array = np.clip(output_array, 0., 1.)
+                    output_array = np.ma.masked_array(output_array, mask=np.isnan(age_grd[age_grd_var]))
+
                     year = age_grd_var.split('_')[1][0]
                     numeral = self.numerals[int(year)]
                     frac_atts = {}
-                    use_attributes = self.conc_atts.items()
-                    dtype = np.float32
-                    pack = None
-                    if 'unc' in age_grd_var:
-                        use_attributes = self.conc_unc_atts.items()
-                        dtype = np.int16
-                        pack = dict(scale_factor=0.001, add_offset=0.0)
-
                     for key, value in use_attributes:
                         if isinstance(value, str):
                             frac_atts[key] = value.replace('$Numeral$', numeral.title()).replace('$YEAR$', year).replace('$numeral$', numeral)
                         else:
                             frac_atts[key] = value
-                    ds.set_variable(frac_atts['name'], age_grd[age_grd_var][None]/100., ('time', 'y', 'x'), frac_atts, dtype=dtype, pack=pack)
+                    ds.set_variable(frac_atts['name'], output_array, ('time', 'y', 'x'), frac_atts, dtype=dtype, pack=pack)
 
             ds.set_variable('status_flag', status_flag + 1, ('time', 'y', 'x'), self.status_atts, dtype=np.byte)
