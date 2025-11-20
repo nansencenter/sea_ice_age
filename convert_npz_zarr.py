@@ -10,7 +10,7 @@ odir = 'zarr/mesh'
 force = False
 
 # load and save mesh files
-for year in tqdm(range(1991, 1995)):
+for year in tqdm(range(1991, 2000)):
     mesh_files = sorted(glob.glob(os.path.join(f'{idir}/mesh/{year}/*.npz')))
     for mesh_file in tqdm(mesh_files):
         mesh_file_date = mesh_file.split('_')[-1].split('.npz')[0]
@@ -19,7 +19,6 @@ for year in tqdm(range(1991, 1995)):
         odir_year = f'{odir}/{mesh_file_date.year}'
         ofile = f'{odir_year}/mesh_{mesh_file_date.strftime("%Y%m%d")}.zip'
         if not force and os.path.exists(ofile) and 'x' in MeshFile(ofile).read_names():
-            print(f'Skipping existing file: {ofile}')
             continue
 
         # find all source files
