@@ -33,8 +33,7 @@ class Array(Base):
 
 # index to speed up "WHERE array_name = ?"
 Index("idx_arrays_name", Array.array_name)
-
-_engine = create_engine(f"sqlite:///{DB_PATH}", future=True)
+_engine = create_engine(f"sqlite:///{DB_PATH}", future=True, connect_args={"timeout": 30.0})
 SessionLocal = sessionmaker(bind=_engine, expire_on_commit=False)
 
 def init_db():

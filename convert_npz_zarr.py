@@ -6,11 +6,11 @@ from lmsiage.mesh_file import MeshFile
 from tqdm import tqdm
 
 idir = 'NERSC_arctic25km_sea_ice_age_v2p1'
-odir = 'zarr/mesh'
+odir = 'NERSC_arctic25km_sea_ice_age_v2p1/zarr/mesh'
 force = False
 
 # load and save mesh files
-for year in tqdm(range(1991, 2000)):
+for year in tqdm(range(2000, 2025)):
     mesh_files = sorted(glob.glob(os.path.join(f'{idir}/mesh/{year}/*.npz')))
     for mesh_file in tqdm(mesh_files):
         mesh_file_date = mesh_file.split('_')[-1].split('.npz')[0]

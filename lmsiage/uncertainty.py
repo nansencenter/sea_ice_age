@@ -157,6 +157,8 @@ class ComputeIntegratedUncertainty:
 
 
 class ComputeAgeUncertainty:
+    MAX_LEN_FRACTIONS = 6
+
     """ Compute sea ice age uncertainty from sea ice concentration and sea ice drift uncertainties."""
     def __init__(self, mesh_dir, age_dir, unc_dir, save_names=('unc_age', 'unc_fracs'), force=False):
         self.mesh_dir = mesh_dir
@@ -191,7 +193,7 @@ class ComputeAgeUncertainty:
         self.row = ((yel  - yel_min) / 25).astype(int)
 
         unc_names = get_file_arrays(unc_file)
-        self.unc_years = sorted([n[7:] for n in unc_names if 'unc_sid' in n and len(n) > 7])
+        self.unc_years = sorted([n[7:] for n in unc_names if 'unc_sid' in n and len(n) > 7])[-self.MAX_LEN_FRACTIONS:]
         if len(self.unc_years) == 0:
             # no uncertainty years found
             return -1
