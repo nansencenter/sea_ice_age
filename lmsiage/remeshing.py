@@ -427,6 +427,16 @@ def replace_negative_element_with_two(x, y, t, neg_area_i):
     flipped_tri = t[neg_area_i]
     contain_tri = t[contain_tri_i]
     common_edge = np.intersect1d(flipped_tri, contain_tri)
+
+    # Handle degenerate case where triangles share only 1 node (not an edge)
+    if len(common_edge) < 2:
+        # In this case, just remove the negative triangle
+        new_triangles = np.array(t)
+        good_new_tri = np.ones(new_triangles.shape[0], dtype=bool)
+        good_new_tri[neg_area_i] = False
+        new_triangles = new_triangles[good_new_tri]
+        return new_triangles
+
     opposite_node = list(set(list(contain_tri)) - set(list(flipped_tri)))[0]
     new_tri1 = np.array([common_edge[0], opposite_node, trouble_node])
     new_tri2 = np.array([common_edge[1], opposite_node, trouble_node])
