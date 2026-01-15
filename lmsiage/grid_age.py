@@ -79,12 +79,16 @@ class SeaIceAgeDataset(GeoDatasetWrite):
             proj4_string = "+proj=laea +lat_0=90 +lon_0=0 +x_0=0 +y_0=0 +datum=WGS84 +units=m +no_defs +type=crs" ,
         )
 
-    def set_global_attributes(self, date, monthly=False):
+    def set_global_attributes(self, date, monthly, step, product_id, dataset_doi):
         duration_int = 30 if monthly else 1
         duration_str = 'P1M' if monthly else 'P1D'
         title = "Arctic Sea Ice Age Climate Data Record v2.1",
         if monthly: 
             title = f"{title} (monthly)"
+        if step == 3:
+            spatial_resolution = "65.0 km grid spacing"
+        else:
+            spatial_resolution = "25.0 km grid spacing"
         global_attributes = dict(
             title = title,
             summary = "This climate data record of sea ice age is obtained from coarse resolution ice drift and conentration OSI SAF products. The processing chain features: 1) Lagrangian advection of ice age fractions, 2) Weighted averaging of fractions.",
@@ -111,11 +115,12 @@ class SeaIceAgeDataset(GeoDatasetWrite):
             creator_url = "https://nersc.no/en/ansatt/anton-korosov/",
             creator_email = "anton.korosov@nersc.no",
             creator_institution = "Nansen Environmental and Remote Sensing Centre (NERSC)",
+            contact = "Anton Korosov, anton.korosov@nersc.no",
             license = "All intellectual property rights of the Sea Ice Age product belong to NERSC. The use of these products is granted to every user, free of charge. If users wish to use these products, NERSC\'s copyright credit must be shown by displaying the words \'Copyright NERSC\' under each of the products shown. NERSC offers no warranty and accepts no liability in respect of the Sea Ice Age products. NERSC neither commits to nor guarantees the continuity, availability, or quality or suitability for any purpose of, the Sea Ice Age product.",
             references = "https://doi.org/10.5194/essd-2025-477 (Scientific publication:A Climate Data Record of Sea Ice Age Using Lagrangian Advection of a Triangular Mesh)",
             date_created = "2025-12-01T00:00:00Z",
             cdm_data_type = "Grid",
-            spatial_resolution = "25.0 km grid spacing",
+            spatial_resolution = spatial_resolution,
             algorithm = "lagrangian_sea_ice_age_v2p1",
             geospatial_bounds_crs = "EPSG:6931",
             contributor_name = "Leo Edel, Laurent Bertino",
@@ -126,20 +131,22 @@ class SeaIceAgeDataset(GeoDatasetWrite):
             Conventions = "CF-1.7, ACDD-1.3",
             standard_name_vocabulary = "CF Standard Name Table (Version 78, 21 September 2021)",
             product_name = "nersc_arctic_sea_ice_age_climate_data_record",
-            product_id = "arctic25km_sea_ice_age_v2p1",
+            product_id = product_id,
             product_version = "2.1.2",
             product_status = "released",
-            dataset_doi = "10.5281/zenodo.15773501",
             #id = "10.5281/zenodo.15773501",
             history = f"Created on 2025-12-01T00:00:00Z by NERSC Sea Ice Age processing script",
-            acknowledgment = " Research Council of Norway (project 'TARDIS', no. 325241) and the European Space Agency (project 'CCI SAGE', no. 4000147560/25/I-LR",
+            acknowledgment = "Research Council of Norway (project 'TARDIS', no. 325241) and the European Space Agency (project 'CCI SAGE', no. 4000147560/25/I-LR)",
             comment = 'No comments',
             geospatial_bounds = "POLYGON((-5387500 -5387500, 5387500 -5387500, 5387500 5387500, -5387500 5387500, -5387500 -5387500))",
             processing_level = "Level 4",
-            publisher_name = "Anton Korosov",
-            publisher_url = "https://nersc.no/en/ansatt/anton-korosov/",
-            publisher_email = "anton.korosov@nersc.no",
+            #publisher_name = "Anton Korosov",
+            #publisher_url = "https://nersc.no/en/ansatt/anton-korosov/",
+            #publisher_email = "anton.korosov@nersc.no",
         )
+        if dataset_doi:
+            global_attributes['dataset_doi'] = dataset_doi
+
         for key, value in global_attributes.items():
             self.setncattr(key, value)
 
@@ -175,17 +182,36 @@ class SeaIceAgeDataset(GeoDatasetWrite):
         dst_var = self.createVariable(vname, dtype, dims, **kw)
         ncatts['grid_mapping'] = self.grid_mapping_variable
         dst_var.setncatts(ncatts)
-        dst_var[0] = data
+        if 'time' in dims:
+            dst_var[0] = data
+        else:
+            dst_var[:] = data
 
 class ExportNetcdf:
     iCDR_start_date = datetime(2021,1,1)
     source_CDR = "Global Sea Ice Drift Climate Data Record Version 1 from the EUMETSAT OSI SAF, \n Sea Ice Concentration Climate Data Record Version 3 from the EUMETSAT OSI SAF"
     source_iCDR = "Daily Low Resolution Sea Ice Displacement from OSI SAF EUMETSAT (OSI-405), \n Sea Ice Concentration Interim Climate Data Record Version 3 from the EUMETSAT OSI SAF"
 
-    def __init__(self, age_grd_dir, dst_root_dir, osisaf_sic_dir, monthly=False, force=False):
+    def __init__(self, age_grd_dir, dst_root_dir, osisaf_sic_dir,
+                 product_id = "arctic25km_sea_ice_age_v2p1",
+                 file_prefix='arctic25km_sea_ice_age_v2p1_',
+                 sia_name= 'sea_ice_age',
+                 dataset_doi="10.5281/zenodo.15773501",
+                 step=1,
+                 export_conc=True,
+                 export_lonlat=False,
+                 monthly=False,
+                 force=False):
         self.age_grd_dir = age_grd_dir
         self.dst_root_dir = dst_root_dir
         self.osisaf_sic_dir = osisaf_sic_dir
+        self.product_id = product_id
+        self.file_prefix = file_prefix
+        self.sia_name = sia_name
+        self.dataset_doi = dataset_doi
+        self.step = step
+        self.export_conc = export_conc
+        self.export_lonlat = export_lonlat
         self.monthly = monthly
         self.force = force
 
@@ -195,19 +221,41 @@ class ExportNetcdf:
         with Dataset(template_file) as template_ds:
             self.xc = template_ds['xc'][:] * 1000
             self.yc = template_ds['yc'][:] * 1000
-            #lon = template_ds['lon'][:]
-            #lat = template_ds['lat'][:]
+            if self.step  == 3:
+                self.xc = self.xc[1:-1:3]
+                self.yc = self.yc[1:-1:3]
+            if self.export_lonlat:
+                self.lon = template_ds['lon'][:]
+                self.lat = template_ds['lat'][:]
+                if self.step  == 3:
+                    self.lon = self.lon[1:-1:3, 1:-1:3]
+                    self.lat = self.lat[1:-1:3, 1:-1:3]
             time_var = template_ds['time']
             for key in time_var.ncattrs():
                 self.time_atts[key] = time_var.getncattr(key)
             status_flag = template_ds['status_flag'][0]
 
         self.status_flag = (status_flag == 1).astype(int)
+        if self.step  == 3:
+            self.status_flag = self.status_flag[1:-1:3,1:-1:3]
+
+
+        self.lat_atts = dict(
+            standard_name = 'latitude',
+            long_name = 'latitude',
+            units = "degrees_north",
+        )
+
+        self.lon_atts = dict(
+            standard_name = 'longitude',
+            long_name = 'longitude',
+            units = "degrees_east",
+        )
 
         self.age_atts = dict(
             standard_name = 'age_of_sea_ice',
             long_name = 'Weighted Average of Sea Ice Age',
-            name = 'sea_ice_age',
+            name = self.sia_name,
             comment = 'The weighted average is computed over all available fractions.',
             units = "years",
             valid_min = np.float32(0),
@@ -219,7 +267,7 @@ class ExportNetcdf:
         self.age_unc_atts = dict(
             long_name = 'Uncertainty in Sea Ice Age',
             standard_name = 'age_of_sea_ice standard_error',
-            name = 'sea_ice_age_uncertainty',
+            name = f'{self.sia_name}_uncertainty',
             ancillary_variables = 'status_flag',
             comment = 'Uncertainty is computed based on observational and model errors.',
             units = "years",
@@ -270,7 +318,7 @@ class ExportNetcdf:
         age_grd_date = datetime.strptime(os.path.basename(age_grd_file), 'grid_%Y%m%d.zip')
         dst_dir = age_grd_date.strftime(f'{self.dst_root_dir}/%Y')
         os.makedirs(dst_dir, exist_ok=True)
-        dst_file = age_grd_date.strftime(f'{dst_dir}/arctic25km_sea_ice_age_v2p1_%Y%m%d.nc')
+        dst_file = age_grd_date.strftime(f'{dst_dir}/{self.file_prefix}%Y%m%d.nc')
         if os.path.exists(dst_file) and not self.force:
             return
 
@@ -283,6 +331,8 @@ class ExportNetcdf:
 
         age_grd = MeshFile(age_grd_file).load()
         age_grd_vars = list(age_grd.keys())
+        if self.step == 3:
+            age_grd = {var: age_grd[var][1:-1:3,1:-1:3] for var in age_grd_vars}
         status_flag = self.status_flag.copy()
         status_flag[(self.status_flag == 0) * np.isnan(age_grd['age'])] = 2
 
@@ -292,39 +342,46 @@ class ExportNetcdf:
                 ds.global_attributes_source = self.source_iCDR
             ds.set_projection_variable()
             ds.set_xy_dims(self.xc, self.yc)
-            ds.set_global_attributes(age_grd_date, monthly=self.monthly)
+            ds.set_global_attributes(age_grd_date, self.monthly, self.step, self.product_id, self.dataset_doi)
             ds.set_time_variable(time_data, self.time_atts)
             # set_time_bnds_variable
             ds.createDimension('nv', 2)
             tbvar = ds.createVariable('time_bnds', 'f8', ('time', 'nv'), zlib=True)
             tbvar[:] = time_bnds_data
 
-            ds.set_variable('sea_ice_age', age_grd['age'], ('time', 'y', 'x'), self.age_atts, dtype=np.float32)
+            ds.set_variable(self.sia_name, age_grd['age'], ('time', 'y', 'x'), self.age_atts, dtype=np.float32)
             unc_age_masked = np.ma.masked_array(age_grd['unc_age'], mask=np.isnan(age_grd['age']))
             unc_age_masked = np.clip(unc_age_masked, 0., 20.)
-            ds.set_variable('sea_ice_age_uncertainty', unc_age_masked, ('time', 'y', 'x'), self.age_unc_atts, dtype=np.int16, pack=dict(scale_factor=0.001, add_offset=0.0))
-
-            for age_grd_var in sorted(age_grd_vars):
-                if age_grd_var.endswith('yi'):
-                    if age_grd_var.startswith('sic_'):
-                        use_attributes = self.conc_atts.items()
-                    elif age_grd_var.startswith('unc_'):
-                        use_attributes = self.conc_unc_atts.items()
-
-                    dtype = np.int16
-                    pack = dict(scale_factor=0.001, add_offset=0.0)
-                    output_array = age_grd[age_grd_var][None]/100.
-                    output_array = np.clip(output_array, 0., 1.)
-                    output_array = np.ma.masked_array(output_array, mask=np.isnan(age_grd[age_grd_var]))
-
-                    year = age_grd_var.split('_')[1][0]
-                    numeral = self.numerals[int(year)]
-                    frac_atts = {}
-                    for key, value in use_attributes:
-                        if isinstance(value, str):
-                            frac_atts[key] = value.replace('$Numeral$', numeral.title()).replace('$YEAR$', year).replace('$numeral$', numeral)
-                        else:
-                            frac_atts[key] = value
-                    ds.set_variable(frac_atts['name'], output_array, ('time', 'y', 'x'), frac_atts, dtype=dtype, pack=pack)
-
+            ds.set_variable(f'{self.sia_name}_uncertainty', unc_age_masked, ('time', 'y', 'x'), self.age_unc_atts, dtype=np.int16, pack=dict(scale_factor=0.001, add_offset=0.0))
+            
             ds.set_variable('status_flag', status_flag + 1, ('time', 'y', 'x'), self.status_atts, dtype=np.byte)
+            
+            if self.export_lonlat:
+                ds.set_variable('longitude', self.lon, ('y', 'x'), self.lon_atts, dtype=np.float32)
+                ds.set_variable('latitude', self.lat, ('y', 'x'), self.lat_atts, dtype=np.float32)
+
+            if self.export_conc:
+                for age_grd_var in sorted(age_grd_vars):
+                    if age_grd_var.endswith('yi'):
+                        if age_grd_var.startswith('sic_'):
+                            use_attributes = self.conc_atts.items()
+                        elif age_grd_var.startswith('unc_'):
+                            use_attributes = self.conc_unc_atts.items()
+
+                        dtype = np.int16
+                        pack = dict(scale_factor=0.001, add_offset=0.0)
+                        output_array = age_grd[age_grd_var][None]/100.
+                        output_array = np.clip(output_array, 0., 1.)
+                        output_array = np.ma.masked_array(output_array, mask=np.isnan(age_grd[age_grd_var]))
+
+                        year = age_grd_var.split('_')[1][0]
+                        numeral = self.numerals[int(year)]
+                        frac_atts = {}
+                        for key, value in use_attributes:
+                            if isinstance(value, str):
+                                frac_atts[key] = value.replace('$Numeral$', numeral.title()).replace('$YEAR$', year).replace('$numeral$', numeral)
+                            else:
+                                frac_atts[key] = value
+                        ds.set_variable(frac_atts['name'], output_array, ('time', 'y', 'x'), frac_atts, dtype=dtype, pack=pack)
+
+                
