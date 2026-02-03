@@ -5,6 +5,7 @@ from netCDF4 import Dataset
 from geodataset.geodataset import GeoDatasetWrite
 import numpy as np
 import pyproj
+from scipy.interpolate import griddata
 
 from lmsiage.utils import IrregularGridInterpolator
 from lmsiage.mesh_file import MeshFile
@@ -25,11 +26,12 @@ class GridAge:
         """ Load mesh, age, and uncertainty data from files."""
         self.x, self.y, self.t = MeshFile(mesh_file).load(['x', 'y', 't'], as_dict=False)
         self.age, self.fracs, = MeshFile(age_file).load(['age', 'f'], as_dict=False)
-        self.unc_age, self.unc_fracs, = MeshFile(unc_file).load(['unc_age', 'unc_fracs'], as_dict=False)
+        if self.unc_dir is not None:
+            self.unc_age, self.unc_fracs, = MeshFile(unc_file).load(['unc_age', 'unc_fracs'], as_dict=False)
 
     def __call__(self, unc_file):
         """ Load, interpolate, save grid """
-        date = datetime.strptime(os.path.basename(unc_file), 'unc_%Y%m%d.zip')
+        date = datetime.strptime(os.path.basename(unc_file).split('_')[1], '%Y%m%d.zip')
         mesh_file = date.strftime(f'{self.mesh_dir}/%Y/mesh_%Y%m%d.zip')
         age_file = date.strftime(f'{self.age_dir}/%Y/age_%Y%m%d.zip')
         grid_dir = date.strftime(f'{self.grid_dir}/%Y')
@@ -40,18 +42,37 @@ class GridAge:
             return
 
         self.load_data(mesh_file, age_file, unc_file)
-        igi = IrregularGridInterpolator(self.x, self.y, self.xgrd, self.ygrd, self.t)
-        src_data = np.vstack([self.age[None], self.fracs, self.unc_age[None], self.unc_fracs])
+        try:
+            igi = IrregularGridInterpolator(self.x, self.y, self.xgrd, self.ygrd, self.t)
+            use_igi = True
+        except RuntimeError as e:
+            print(f'Error interpolating file {mesh_file} {unc_file}')
+            coords0 = np.column_stack((self.x[self.t].mean(axis=1), self.y[self.t].mean(axis=1)))
+            coords1 = np.column_stack((self.xgrd.flatten(), self.ygrd.flatten()))
+            use_igi = False
+
+        if self.unc_dir is not None:
+            src_data = np.vstack([self.age[None], self.fracs, self.unc_age[None], self.unc_fracs])
+        else:
+            src_data = np.vstack([self.age[None], self.fracs])
         frac_num = len(self.fracs)
         save_data_names = (
             ['age'] + 
-            [f'sic_{frac_num - i}yi' for i in range(frac_num)] +
-            ['unc_age'] + 
-            [f'unc_{frac_num - i}yi' for i in range(frac_num)]
+            [f'sic_{frac_num - i}yi' for i in range(frac_num)]
         )
+        if self.unc_dir is not None:
+            save_data_names += (
+                ['unc_age'] + 
+                [f'unc_{frac_num - i}yi' for i in range(frac_num)]
+            )
+
         dst_data = {}
         for d, name in zip(src_data, save_data_names):
-            dgrd = igi.interp_field(d)
+            if use_igi:
+                dgrd = igi.interp_field(d)
+            else:
+                dgrd = griddata(coords0, d, coords1, method='linear')
+                dgrd.shape = self.xgrd.shape
             dgrd[self.mask == 0] = np.nan
             dst_data[name] = dgrd.astype(np.float16)
 
@@ -79,10 +100,11 @@ class SeaIceAgeDataset(GeoDatasetWrite):
             proj4_string = "+proj=laea +lat_0=90 +lon_0=0 +x_0=0 +y_0=0 +datum=WGS84 +units=m +no_defs +type=crs" ,
         )
 
-    def set_global_attributes(self, date, monthly, step, product_id, dataset_doi):
+    def set_global_attributes(self, date, monthly, step, product_id, dataset_doi, add_met_publisher):
         duration_int = 30 if monthly else 1
         duration_str = 'P1M' if monthly else 'P1D'
-        title = "Arctic Sea Ice Age Climate Data Record v2.1",
+        title = "Arctic Sea Ice Age Climate Data Record v2.1"
+        date_created = datetime.now().strftime("%Y-%m-%dT00:00:00Z")
         if monthly: 
             title = f"{title} (monthly)"
         if step == 3:
@@ -92,8 +114,8 @@ class SeaIceAgeDataset(GeoDatasetWrite):
         global_attributes = dict(
             title = title,
             summary = "This climate data record of sea ice age is obtained from coarse resolution ice drift and conentration OSI SAF products. The processing chain features: 1) Lagrangian advection of ice age fractions, 2) Weighted averaging of fractions.",
-            iso_topic_category = "oceans,climatology,meteorology,atmosphere",
-            keywords = "GCMDSK:Earth Science > Cryosphere > Sea Ice > Sea Ice Concentration, GCMDSK:Earth Science > Oceans > Sea Ice > Sea Ice Concentration, GCMDSK:Earth Science > Climate Indicators > Cryospheric Indicators > Sea Ice Concentration, GCMDSK:Earth Science > Cryosphere > Sea Ice > Sea Ice Motion, GCMDSK:Earth Science > Oceans > Sea Ice > Sea Ice Motion, GCMDSK:Earth Science > Climate Indicators > Cryospheric Indicators > Sea Ice Motion, GCMDLOC:Geographic Region > Northern Hemisphere, GCMDLOC:Vertical Location > Sea Surface, GCMDPROV: CONSORTIA/INSTITUTIONS > NERSC > Nansen Environmental and Remote Sensing Centre",
+            iso_topic_category = "oceans,climatologyMeteorologyAtmosphere",
+            keywords = "GCMDSK:Earth Science > Cryosphere > Sea Ice > Sea Ice Concentration, GCMDSK:Earth Science > Oceans > Sea Ice > Sea Ice Concentration, GCMDSK:Earth Science > Climate Indicators > Cryospheric Indicators > Sea Ice Concentration, GCMDSK:Earth Science > Cryosphere > Sea Ice > Sea Ice Motion, GCMDSK:Earth Science > Oceans > Sea Ice > Sea Ice Motion, GCMDSK:Earth Science > Climate Indicators > Cryospheric Indicators > Sea Ice Motion, GCMDLOC:Geographic Region > Northern Hemisphere, GCMDLOC:Vertical Location > Sea Surface, GCMDPROV: CONSORTIA/INSTITUTIONS > NERSC > Nansen Environmental and Remote Sensing Center",
             keywords_vocabulary = "GCMDSK:GCMD Science Keywords:https://gcmd.earthdata.nasa.gov/kms/concepts/concept_scheme/sciencekeywords, GCMDPROV:GCMD Providers:https://gcmd.earthdata.nasa.gov/kms/concepts/concept_scheme/providers, GCMDLOC:GCMD Locations:https://gcmd.earthdata.nasa.gov/kms/concepts/concept_scheme/locations",
             geospatial_lat_max = 90.00,
             geospatial_lat_min = 17.61,
@@ -101,24 +123,26 @@ class SeaIceAgeDataset(GeoDatasetWrite):
             geospatial_lon_min = -180.00,
             geospatial_vertical_min = 0.00,
             geospatial_vertical_max = 0.00,
-            instrument = "SSM/I,SSM/I,SSM/I,SSM/I,SSM/I,SSM/I,SSMIS,SSMIS,SSMIS,AMSR-E,AMSR2",
-            platform = "DMSP-F08,DMSP-F10,DMSP-F11,DMSP-F13,DMSP-F14,DMSP-F15,DMSP-F16,DMSP-F17,DMSP-F18,Aqua,GCOM-W1",
+            instrument = "Special Sensor Microwave - Imager (SSM/I), Special Sensor Microwave - Imager (SSM/I), Special Sensor Microwave - Imager (SSM/I), Special Sensor Microwave - Imager (SSM/I), Special Sensor Microwave - Imager (SSM/I), Special Sensor Microwave - Imager (SSM/I), Special Sensor Microwave - Imager/Sounder (SSMIS), Special Sensor Microwave - Imager/Sounder (SSMIS), Special Sensor Microwave - Imager/Sounder (SSMIS), Advanced Microwave Scanning Radiometer for EOS (AMSR-E), Advanced Microwave Scanning Radiometer - 2 (AMSR2)",
+            platform = "Defense Meteorological Satellite Program - F08 (DMSP-F08), Defense Meteorological Satellite Program - F10 (DMSP-F10), Defense Meteorological Satellite Program - F11 (DMSP-F11), Defense Meteorological Satellite Program - F13 (DMSP-F13), Defense Meteorological Satellite Program - F14 (DMSP-F14), Defense Meteorological Satellite Program - F15 (DMSP-F15), Defense Meteorological Satellite Program - F16 (DMSP-F16), Defense Meteorological Satellite Program - F17 (DMSP-F17), Defense Meteorological Satellite Program - F18 (DMSP-F18), Earth Observation System - Aqua (Aqua), Global Change Observation Mission for Water  (GCOM-W)",
+            platform_vocabulary = "WMO OSCAR Space:https://space.oscar.wmo.int/satellites",
+            instrument_vocabulary = "WMO OSCAR Space:https://space.oscar.wmo.int/instruments",
             source = self.global_attributes_source,
             time_coverage_start = date.strftime("%Y-%m-%dT00:00:00Z"),
             time_coverage_end = (date + timedelta(duration_int)).strftime("%Y-%m-%dT00:00:00Z"),
             time_coverage_duration = duration_str,
             time_coverage_resolution = duration_str,
             project = "Thickness of Arctic sea ice Reconstructed by Data assimilation and artificial Intelligence Seamlessly (TARDIS)",
-            institution = "Nansen Environmental and Remote Sensing Centre",
+            institution = "Nansen Environmental and Remote Sensing Center",
             creator_name = "Anton Korosov",
             creator_type = "person",
             creator_url = "https://nersc.no/en/ansatt/anton-korosov/",
             creator_email = "anton.korosov@nersc.no",
-            creator_institution = "Nansen Environmental and Remote Sensing Centre (NERSC)",
+            creator_institution = "Nansen Environmental and Remote Sensing Center (NERSC)",
             contact = "Anton Korosov, anton.korosov@nersc.no",
-            license = "All intellectual property rights of the Sea Ice Age product belong to NERSC. The use of these products is granted to every user, free of charge. If users wish to use these products, NERSC\'s copyright credit must be shown by displaying the words \'Copyright NERSC\' under each of the products shown. NERSC offers no warranty and accepts no liability in respect of the Sea Ice Age products. NERSC neither commits to nor guarantees the continuity, availability, or quality or suitability for any purpose of, the Sea Ice Age product.",
+            license = "CC-BY-4.0",
             references = "https://doi.org/10.5194/essd-2025-477 (Scientific publication:A Climate Data Record of Sea Ice Age Using Lagrangian Advection of a Triangular Mesh)",
-            date_created = "2025-12-01T00:00:00Z",
+            date_created = date_created,
             cdm_data_type = "Grid",
             spatial_resolution = spatial_resolution,
             algorithm = "lagrangian_sea_ice_age_v2p1",
@@ -135,18 +159,23 @@ class SeaIceAgeDataset(GeoDatasetWrite):
             product_version = "2.1.2",
             product_status = "released",
             #id = "10.5281/zenodo.15773501",
-            history = f"Created on 2025-12-01T00:00:00Z by NERSC Sea Ice Age processing script",
+            history = f"Created on {date_created} by NERSC Sea Ice Age processing script",
             acknowledgment = "Research Council of Norway (project 'TARDIS', no. 325241) and the European Space Agency (project 'CCI SAGE', no. 4000147560/25/I-LR)",
             comment = 'No comments',
             geospatial_bounds = "POLYGON((-5387500 -5387500, 5387500 -5387500, 5387500 5387500, -5387500 5387500, -5387500 -5387500))",
             processing_level = "Level 4",
-            #publisher_name = "Anton Korosov",
-            #publisher_url = "https://nersc.no/en/ansatt/anton-korosov/",
-            #publisher_email = "anton.korosov@nersc.no",
         )
+
         if dataset_doi:
             global_attributes['dataset_doi'] = dataset_doi
-
+  
+        if add_met_publisher:
+            global_attributes['publisher_name'] = "Norwegian Meteorological Institute/Arctic Data Centre (NO/MET/ADC)"
+            global_attributes['publisher_email'] = "adc-support@met.no"
+            global_attributes['publisher_url'] = "https://adc.met.no/"
+            global_attributes['publisher_institution'] = "Norwegian Meteorological Institute"
+            global_attributes['publisher_institution_pid'] = "https://ror.org/001n36p86"
+  
         for key, value in global_attributes.items():
             self.setncattr(key, value)
 
@@ -192,16 +221,7 @@ class ExportNetcdf:
     source_CDR = "Global Sea Ice Drift Climate Data Record Version 1 from the EUMETSAT OSI SAF, \n Sea Ice Concentration Climate Data Record Version 3 from the EUMETSAT OSI SAF"
     source_iCDR = "Daily Low Resolution Sea Ice Displacement from OSI SAF EUMETSAT (OSI-405), \n Sea Ice Concentration Interim Climate Data Record Version 3 from the EUMETSAT OSI SAF"
 
-    def __init__(self, age_grd_dir, dst_root_dir, osisaf_sic_dir,
-                 product_id = "arctic25km_sea_ice_age_v2p1",
-                 file_prefix='arctic25km_sea_ice_age_v2p1_',
-                 sia_name= 'sea_ice_age',
-                 dataset_doi="10.5281/zenodo.15773501",
-                 step=1,
-                 export_conc=True,
-                 export_lonlat=False,
-                 monthly=False,
-                 force=False):
+    def __init__(self, age_grd_dir, dst_root_dir, osisaf_sic_dir, product_id, file_prefix, sia_name, dataset_doi, add_met_publisher, step, export_conc, export_lonlat, monthly, force=False):
         self.age_grd_dir = age_grd_dir
         self.dst_root_dir = dst_root_dir
         self.osisaf_sic_dir = osisaf_sic_dir
@@ -209,6 +229,7 @@ class ExportNetcdf:
         self.file_prefix = file_prefix
         self.sia_name = sia_name
         self.dataset_doi = dataset_doi
+        self.add_met_publisher = add_met_publisher
         self.step = step
         self.export_conc = export_conc
         self.export_lonlat = export_lonlat
@@ -342,7 +363,7 @@ class ExportNetcdf:
                 ds.global_attributes_source = self.source_iCDR
             ds.set_projection_variable()
             ds.set_xy_dims(self.xc, self.yc)
-            ds.set_global_attributes(age_grd_date, self.monthly, self.step, self.product_id, self.dataset_doi)
+            ds.set_global_attributes(age_grd_date, self.monthly, self.step, self.product_id, self.dataset_doi, self.add_met_publisher)
             ds.set_time_variable(time_data, self.time_atts)
             # set_time_bnds_variable
             ds.createDimension('nv', 2)

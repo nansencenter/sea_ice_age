@@ -8,7 +8,7 @@ from tqdm import tqdm
 
 from lmsiage.utils import fill_gaps
 from lmsiage.mesh_file import MeshFile
-from lmsiage.zarr_index_tools import update_index_for_dir
+from lmsiage.zarr_index_tools import update_index_for_dir, cleanup_missing_files
 from lmsiage.zarr_index import get_file_arrays
 
 
@@ -18,6 +18,7 @@ mesh_dir = f'{sia_dir}/mesh'
 age_dir = f'{sia_dir}/age'
 unc_dir = f'{sia_dir}/uncert'
 update_index_for_dir(mesh_dir)
+cleanup_missing_files()
 
 # Load all inital values
 mesh_init_file = 'mesh_arctic_ease_25km_max7.npz'
@@ -76,7 +77,7 @@ def interpolate(mesh_file):
     mf.save(data, mode=mode)
 
 
-mesh_files = sorted(glob.glob(f'{mesh_dir}/*/mesh_*zip'))
+mesh_files = sorted(glob.glob(f'{mesh_dir}/2025/mesh_*zip'))
 print(len(mesh_files), mesh_files[0], mesh_files[-1])
 
 for mesh_file in tqdm(mesh_files):

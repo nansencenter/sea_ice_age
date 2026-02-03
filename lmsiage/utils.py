@@ -22,6 +22,7 @@ from .remeshing import (
     laplace_smooth,
     clean_mesh,
     )
+from .mesh_file import MeshFile
 
 def make_polygon_shapely(x, y):
     return Polygon([(x[0],y[0]), (x[1],y[1]), (x[2],y[2])])
@@ -73,11 +74,9 @@ def advect_nodes(tri0, u0, v0, max_dist0):
         print('NEGATIVE AREA!')
     return Triangulation(x1, y1, tri0.triangles)
 
-# TODO:
-# Outdated function - remove later
 def get_mesh_files(idate, lag_dir, mesh_init_file):
     mesh_src_dir = idate.strftime(f'{lag_dir}/%Y')
-    mesh_src_file = idate.strftime(f'{mesh_src_dir}/mesh_%Y%m%d.npz')
+    mesh_src_file = idate.strftime(f'{mesh_src_dir}/mesh_%Y%m%d.zip')
     if not os.path.exists(mesh_src_file):
         print('Load INIT')
         mesh_src_file = mesh_init_file
@@ -85,8 +84,7 @@ def get_mesh_files(idate, lag_dir, mesh_init_file):
     mesh_dst_date = idate + timedelta(1)
     mesh_dst_dir = mesh_dst_date.strftime(f'{lag_dir}/%Y')
     os.makedirs(mesh_dst_dir, exist_ok=True)
-    mesh_dst_file = mesh_dst_date.strftime(f'{mesh_dst_dir}/mesh_%Y%m%d.npz')
-
+    mesh_dst_file = mesh_dst_date.strftime(f'{mesh_dst_dir}/mesh_%Y%m%d.zip')
     return mesh_src_file, mesh_dst_file
 
 def load_data(ifile, mesh_src_file):
@@ -95,10 +93,7 @@ def load_data(ifile, mesh_src_file):
         v = -d['v']
     u[np.isnan(u)] = 0
     v[np.isnan(v)] = 0
-    with np.load(mesh_src_file) as d:
-        x0 = d['x']
-        y0 = d['y']
-        t0 = d['t']
+    x0, y0, t0 = MeshFile(mesh_src_file).load(['x', 'y', 't'], as_dict=False)    
     return u, v, Triangulation(x0, y0, t0)
 
 def remesh(tri_a, fixed_nodes_idx, min_area, min_edge_length, min_edge_angle, max_edge_length, verbose=False):
