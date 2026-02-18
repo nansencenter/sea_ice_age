@@ -221,7 +221,7 @@ class ExportNetcdf:
     source_CDR = "Global Sea Ice Drift Climate Data Record Version 1 from the EUMETSAT OSI SAF, \n Sea Ice Concentration Climate Data Record Version 3 from the EUMETSAT OSI SAF"
     source_iCDR = "Daily Low Resolution Sea Ice Displacement from OSI SAF EUMETSAT (OSI-405), \n Sea Ice Concentration Interim Climate Data Record Version 3 from the EUMETSAT OSI SAF"
 
-    def __init__(self, age_grd_dir, dst_root_dir, osisaf_sic_dir, product_id, file_prefix, sia_name, dataset_doi, add_met_publisher, step, export_conc, export_lonlat, monthly, force=False):
+    def __init__(self, age_grd_dir, dst_root_dir, osisaf_sic_dir, product_id, file_prefix, sia_name, dataset_doi, add_met_publisher, step, export_conc, export_uncert, export_lonlat, monthly, make_monthly_dirs, force=False):
         self.age_grd_dir = age_grd_dir
         self.dst_root_dir = dst_root_dir
         self.osisaf_sic_dir = osisaf_sic_dir
@@ -232,8 +232,10 @@ class ExportNetcdf:
         self.add_met_publisher = add_met_publisher
         self.step = step
         self.export_conc = export_conc
+        self.export_uncert = export_uncert
         self.export_lonlat = export_lonlat
         self.monthly = monthly
+        self.make_monthly_dirs = make_monthly_dirs
         self.force = force
 
     def set_attributes(self):
@@ -338,6 +340,8 @@ class ExportNetcdf:
     def __call__(self, age_grd_file):
         age_grd_date = datetime.strptime(os.path.basename(age_grd_file), 'grid_%Y%m%d.zip')
         dst_dir = age_grd_date.strftime(f'{self.dst_root_dir}/%Y')
+        if self.make_monthly_dirs:
+            dst_dir = age_grd_date.strftime(f'{self.dst_root_dir}/%Y/%m')
         os.makedirs(dst_dir, exist_ok=True)
         dst_file = age_grd_date.strftime(f'{dst_dir}/{self.file_prefix}%Y%m%d.nc')
         if os.path.exists(dst_file) and not self.force:
@@ -371,9 +375,10 @@ class ExportNetcdf:
             tbvar[:] = time_bnds_data
 
             ds.set_variable(self.sia_name, age_grd['age'], ('time', 'y', 'x'), self.age_atts, dtype=np.float32)
-            unc_age_masked = np.ma.masked_array(age_grd['unc_age'], mask=np.isnan(age_grd['age']))
-            unc_age_masked = np.clip(unc_age_masked, 0., 20.)
-            ds.set_variable(f'{self.sia_name}_uncertainty', unc_age_masked, ('time', 'y', 'x'), self.age_unc_atts, dtype=np.int16, pack=dict(scale_factor=0.001, add_offset=0.0))
+            if self.export_uncert:
+                unc_age_masked = np.ma.masked_array(age_grd['unc_age'], mask=np.isnan(age_grd['age']))
+                unc_age_masked = np.clip(unc_age_masked, 0., 20.)
+                ds.set_variable(f'{self.sia_name}_uncertainty', unc_age_masked, ('time', 'y', 'x'), self.age_unc_atts, dtype=np.int16, pack=dict(scale_factor=0.001, add_offset=0.0))
             
             ds.set_variable('status_flag', status_flag + 1, ('time', 'y', 'x'), self.status_atts, dtype=np.byte)
             
@@ -383,6 +388,8 @@ class ExportNetcdf:
 
             if self.export_conc:
                 for age_grd_var in sorted(age_grd_vars):
+                    if not self.export_uncert and age_grd_var.startswith('unc_'):
+                        continue
                     if age_grd_var.endswith('yi'):
                         if age_grd_var.startswith('sic_'):
                             use_attributes = self.conc_atts.items()

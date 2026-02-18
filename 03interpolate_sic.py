@@ -16,7 +16,7 @@ sid_dir = 'OSISAF_ice_drift_CDR_postproc'
 sia_dir = 'NERSC_arctic25km_sea_ice_age_v2p1/zarr'
 mesh_dir = f'{sia_dir}/mesh'
 age_dir = f'{sia_dir}/age'
-unc_dir = f'{sia_dir}/uncert'
+
 update_index_for_dir(mesh_dir)
 cleanup_missing_files()
 
@@ -76,8 +76,7 @@ def interpolate(mesh_file):
         mode = 'a'
     mf.save(data, mode=mode)
 
-
-mesh_files = sorted(glob.glob(f'{mesh_dir}/2025/mesh_*zip'))
+mesh_files = sorted(glob.glob(f'{mesh_dir}/202[5,6]/mesh_*zip'))
 print(len(mesh_files), mesh_files[0], mesh_files[-1])
 
 for mesh_file in tqdm(mesh_files):
