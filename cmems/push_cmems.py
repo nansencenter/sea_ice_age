@@ -141,7 +141,7 @@ def calculate_checksum(filepath: str) -> str:
 
 def create_remote_directory(dst_dir: str):
     """Create a remote directory using lftp."""
-    lftp_cmd = f"mkdir -p {dst_dir}"
+    lftp_cmd = f"cd {dst_dir} || mkdir -p {dst_dir}"
     run_lftp_command(lftp_cmd)
     sleep(SLEEP_PUSH_SECONDS)
 

@@ -221,7 +221,24 @@ class ExportNetcdf:
     source_CDR = "Global Sea Ice Drift Climate Data Record Version 1 from the EUMETSAT OSI SAF, \n Sea Ice Concentration Climate Data Record Version 3 from the EUMETSAT OSI SAF"
     source_iCDR = "Daily Low Resolution Sea Ice Displacement from OSI SAF EUMETSAT (OSI-405), \n Sea Ice Concentration Interim Climate Data Record Version 3 from the EUMETSAT OSI SAF"
 
-    def __init__(self, age_grd_dir, dst_root_dir, osisaf_sic_dir, product_id, file_prefix, sia_name, dataset_doi, add_met_publisher, step, export_conc, export_uncert, export_lonlat, monthly, make_monthly_dirs, force=False):
+    def __init__(self, 
+                 age_grd_dir : str,
+                 dst_root_dir: str,
+                 osisaf_sic_dir: str,
+                 product_id: str,
+                 file_prefix: str,
+                 sia_name: str,
+                 dataset_doi: str,
+                 add_met_publisher: bool,
+                 step: int,
+                 export_conc: bool,
+                 export_uncert: bool,
+                 export_lonlat: bool,
+                 monthly: bool,
+                 make_monthly_dirs: bool,
+                 max_fraction_age: int,
+                 force: bool
+                 ) -> None:
         self.age_grd_dir = age_grd_dir
         self.dst_root_dir = dst_root_dir
         self.osisaf_sic_dir = osisaf_sic_dir
@@ -236,6 +253,7 @@ class ExportNetcdf:
         self.export_lonlat = export_lonlat
         self.monthly = monthly
         self.make_monthly_dirs = make_monthly_dirs
+        self.max_fraction_age = max_fraction_age
         self.force = force
 
     def set_attributes(self):
@@ -342,7 +360,6 @@ class ExportNetcdf:
         dst_dir = age_grd_date.strftime(f'{self.dst_root_dir}/%Y')
         if self.make_monthly_dirs:
             dst_dir = age_grd_date.strftime(f'{self.dst_root_dir}/%Y/%m')
-        os.makedirs(dst_dir, exist_ok=True)
         dst_file = age_grd_date.strftime(f'{dst_dir}/{self.file_prefix}%Y%m%d.nc')
         if os.path.exists(dst_file) and not self.force:
             return
@@ -358,9 +375,28 @@ class ExportNetcdf:
         age_grd_vars = list(age_grd.keys())
         if self.step == 3:
             age_grd = {var: age_grd[var][1:-1:3,1:-1:3] for var in age_grd_vars}
+        if self.max_fraction_age > 0:
+            if f'sic_{self.max_fraction_age}yi' not in age_grd:
+                print(f'Max fraction age {self.max_fraction_age} not found in data, skipping file {age_grd_file}')
+                return None
+            for var in age_grd_vars:
+                if var.startswith('sic_') and var.endswith('yi'):
+                    max_age_var = f'sic_{self.max_fraction_age}yi'
+                    if var > max_age_var:
+                        age_grd[max_age_var] += age_grd[var]
+                        del age_grd[var]
+            
+                if var.startswith('unc_') and var.endswith('yi'):
+                    max_age_var = f'unc_{self.max_fraction_age}yi'
+                    if var > max_age_var:
+                        age_grd[max_age_var] = np.hypot(age_grd[max_age_var], age_grd[var])
+                        del age_grd[var]
+
+        age_grd_vars = list(age_grd.keys())
         status_flag = self.status_flag.copy()
         status_flag[(self.status_flag == 0) * np.isnan(age_grd['age'])] = 2
 
+        os.makedirs(dst_dir, exist_ok=True)
         with SeaIceAgeDataset(dst_file, 'w') as ds:
             ds.global_attributes_source = self.source_CDR
             if age_grd_date >= self.iCDR_start_date:
