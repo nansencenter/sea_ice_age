@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 from argparse import ArgumentParser
 import datetime as dt
 import glob
@@ -13,7 +15,6 @@ from typing import List, Tuple
 PRODUCT = "SEAICE_ARC_PHY_AUTO_L4_MY_011_025"
 DATASET = "cmems_obs-si_arc_phy-siage_my_P1D-m_202603"
 BOOKMARK = 'cmems-my'
-ROOT_CMEMS_DIR = 'NERSC_arctic25km_sea_ice_age_v2p1/zarr/cmems'
 
 SLEEP_PUSH_SECONDS = 0.1
 SLEEP_RESPONSE_SECONDS = 60
@@ -235,7 +236,7 @@ def download_response_file(dnt_filename: str, product: str = PRODUCT):
     validate_response(remote_resp_filename)
 
 
-def process_netcdf_files(netcdf_files: List[str], dst_dir: str) -> str:
+def process_netcdf_files(netcdf_files: List[str], dst_dir: str, root_cmems_dir: str) -> str:
     """
     Process and upload NetCDF files, returning XML content.
     
@@ -245,6 +246,8 @@ def process_netcdf_files(netcdf_files: List[str], dst_dir: str) -> str:
         List of NetCDF file paths to process
     dst_dir : str
         Destination directory on remote server
+    root_cmems_dir : str
+        Root CMEMS directory path
         
     Returns:
     --------
@@ -261,14 +264,14 @@ def process_netcdf_files(netcdf_files: List[str], dst_dir: str) -> str:
         checksum = calculate_checksum(filepath)
         
         # Create XML entry
-        filename = filepath.replace(ROOT_CMEMS_DIR, '').lstrip('/')
+        filename = filepath.replace(root_cmems_dir, '').lstrip('/')
         file_xml = create_file_xml_entry(filename, checksum, t0, t1)
         files_xml.append(file_xml)
     
     return '\n'.join(files_xml) + '\n'
 
 
-def process_directory(input_dir: str) -> bool:
+def process_directory(input_dir: str, root_cmems_dir: str, force: bool) -> bool:
     """
     Process a single directory: upload files and create DNT.
     
@@ -276,16 +279,20 @@ def process_directory(input_dir: str) -> bool:
     -----------
     input_dir : str
         Input directory path containing NetCDF files
+    root_cmems_dir : str
+        Root CMEMS directory path
+    force : bool
+        Force processing even if directory is already pushed
         
     Returns:
     --------
     bool
         True if directory was actually processed, False if skipped
     """
-    date_dir = input_dir.replace(ROOT_CMEMS_DIR, '').lstrip('/')
+    date_dir = input_dir.replace(root_cmems_dir, '').lstrip('/')
     
     # Check if already pushed
-    if check_directory_pushed(date_dir):
+    if check_directory_pushed(date_dir) and not force:
         print(f'{input_dir} is already pushed, skipping')
         return False
     
@@ -309,7 +316,7 @@ def process_directory(input_dir: str) -> bool:
     create_remote_directory(dst_dir)
     
     # Process and upload files
-    files_xml = process_netcdf_files(netcdf_files, dst_dir)
+    files_xml = process_netcdf_files(netcdf_files, dst_dir, root_cmems_dir)
     
     # Create and save DNT XML
     xml_content = create_dnt_xml(files_xml)
@@ -333,6 +340,10 @@ def process_directory(input_dir: str) -> bool:
 def main():
     """Main execution function."""
     parser = ArgumentParser(description="Push sea ice age data to CMEMS")
+    parser.add_argument('root_dir',
+        type=str,
+        help="Root CMEMS directory path",
+    )
     parser.add_argument(
         '-im', "--input-dir-mask", 
         type=str, 
@@ -345,13 +356,19 @@ def main():
         help="Stop after the first directory (for testing)"
     )
 
+    parser.add_argument(
+        '-f', "--force", 
+        action='store_true', 
+        help="Force processing even if directory is already pushed"
+    )
+
     args = parser.parse_args()
     
     # Find input directories
-    input_dirs = sorted(glob.glob(f'{ROOT_CMEMS_DIR}/{args.input_dir_mask}'))
+    input_dirs = sorted(glob.glob(f'{args.root_dir}/{args.input_dir_mask}'))
     
     if not input_dirs:
-        print(f"No directories found matching: {ROOT_CMEMS_DIR}/{args.input_dir_mask}")
+        print(f"No directories found matching: {args.root_dir}/{args.input_dir_mask}")
         return
     
     print(f"Found {len(input_dirs)} input directories:")
@@ -364,7 +381,7 @@ def main():
         print(f"[{i}/{len(input_dirs)}] Processing: {input_dir}")
         
         try:
-            was_processed = process_directory(input_dir)
+            was_processed = process_directory(input_dir, args.root_dir, args.force)
         except Exception as e:
             print(f"ERROR processing {input_dir}: {e}")
             if args.stop:

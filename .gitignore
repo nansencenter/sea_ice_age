@@ -20,3 +20,5 @@ OSISAF_ice_conc_CDR_v3p0
 SAGE_RRDP
 Arctic_buoys
 IABP_live
+*.zip
+*.nc

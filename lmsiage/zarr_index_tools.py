@@ -1,6 +1,8 @@
 import os
 import glob
 
+from tqdm import tqdm
+
 from .mesh_file import MeshFile
 from .zarr_index import init_db, get_session, File, Array
 
@@ -19,7 +21,7 @@ def update_index_for_dir(root_dir: str, pattern: str = "*.zip"):
     root_dir = os.path.abspath(root_dir)
 
     with get_session() as session:
-        for zip_path in glob.iglob(os.path.join(root_dir, "**", pattern), recursive=True):
+        for zip_path in tqdm(glob.iglob(os.path.join(root_dir, "**", pattern), recursive=True)):
             zip_path = os.path.abspath(zip_path)
 
             try:
