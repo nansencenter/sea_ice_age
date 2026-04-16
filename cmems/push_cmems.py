@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-from argparse import ArgumentParser
+from argparse import ArgumentParser, ArgumentTypeError
 import datetime as dt
 import glob
 import os
@@ -336,20 +336,22 @@ def process_directory(input_dir: str, root_cmems_dir: str, force: bool) -> bool:
     print(f"\n\n\t\tSUCCESS: {input_dir}\n\n")
     return True
 
+def is_dir(path):
+    if not os.path.isdir(path):
+        raise ArgumentTypeError(f"'{path}' is not a valid directory")
+    return path
 
 def main():
     """Main execution function."""
     parser = ArgumentParser(description="Push sea ice age data to CMEMS")
-    parser.add_argument('root_dir',
-        type=str,
-        help="Root CMEMS directory path",
+    parser.add_argument("input_dirs",
+        help=(
+            "CMEMS directory for a given month (e.g., cmems_nc/2026/03 ) or mask (e.g., cmems_nc/*/*)."
+            "Each directory must have two subdirectories after the root directory in format: \"root_dir/YYYY/MM\"."),
+        nargs='+',
+        type=is_dir,
     )
-    parser.add_argument(
-        '-im', "--input-dir-mask", 
-        type=str, 
-        help="Input directory mask (e.g., '2026/03' or '*/*')", 
-        default="*/*"
-    )
+    
     parser.add_argument(
         '-s', "--stop", 
         action='store_true', 
@@ -363,25 +365,26 @@ def main():
     )
 
     args = parser.parse_args()
-    
-    # Find input directories
-    input_dirs = sorted(glob.glob(f'{args.root_dir}/{args.input_dir_mask}'))
-    
-    if not input_dirs:
-        print(f"No directories found matching: {args.root_dir}/{args.input_dir_mask}")
-        return
-    
-    print(f"Found {len(input_dirs)} input directories:")
-    print(f"  First: {input_dirs[0]}")
-    print(f"  Last:  {input_dirs[-1]}")
+
+    print(f"Found {len(args.input_dirs)} input directories:")
+    print(f"  First: {args.input_dirs[0]}")
+    print(f"  Last:  {args.input_dirs[-1]}")
     print()
     
     # Process each directory
-    for i, input_dir in enumerate(input_dirs, 1):
-        print(f"[{i}/{len(input_dirs)}] Processing: {input_dir}")
+    for i, input_dir in enumerate(args.input_dirs, 1):
+        
+        # Extract and validate directory structure
+        parts = input_dir.split(os.sep)
+        assert len(parts) >= 3, f"Invalid directory format: {input_dir}. Expected format: root_dir/YYYY/MM"
+        assert int(parts[-2]), f"Expected year in directory path: {input_dir}"
+        assert int(parts[-1]), f"Expected month in directory path: {input_dir}"
+        root_dir = os.sep.join(parts[:-2])
+
+        print(f"[{i}/{len(args.input_dirs)}] Processing: {input_dir}")
         
         try:
-            was_processed = process_directory(input_dir, args.root_dir, args.force)
+            was_processed = process_directory(input_dir, root_dir, args.force)
         except Exception as e:
             print(f"ERROR processing {input_dir}: {e}")
             if args.stop:
@@ -392,11 +395,11 @@ def main():
             print(f"Stopping after processing {input_dir} (--stop flag)")
             break
         
-        if i < len(input_dirs) and was_processed:
+        if i < len(args.input_dirs) and was_processed:
             print(f"Waiting {SLEEP_DIR_SECONDS}s before next directory...")
             sleep(SLEEP_DIR_SECONDS)
     
-    print(f"\nCompleted processing {len(input_dirs)} directories")
+    print(f"\nCompleted processing {len(args.input_dirs)} directories")
 
 
 if __name__ == "__main__":
