@@ -1,0 +1,7 @@
+mesh_init_file: "mesh_arctic_ease_25km_max7.npz"
+sid_dir: "OSISAF_ice_drift_CDR_postproc"
+lag_dir: "NERSC_arctic25km_sea_ice_age_test/mesh"
+sid_mask: "1991/*npz"
+grid_resolution: 2
+max_mask_fix_node: 0.15
+max_mask_zero_speed: 0.6
