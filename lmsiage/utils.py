@@ -74,6 +74,22 @@ def advect_nodes(tri0, u0, v0, max_dist0):
         print('NEGATIVE AREA!')
     return Triangulation(x1, y1, tri0.triangles)
 
+def advect_nodes_carefully(x0, y0, u0, v0, t, i=0, maxi=100):
+    x1 = x0 + u0
+    y1 = y0 + v0
+    a1 = get_area(x1, y1, t)
+    if a1.min() >= 0:
+        #print('All areas are positive after advecting nodes carefully', i)
+        return x1, y1
+    neg_elems = np.nonzero(a1 < 0)[0]
+    neg_nodes = np.unique(t[neg_elems].flatten())
+    u0[neg_nodes] *= 0.5
+    v0[neg_nodes] *= 0.5
+    if i >= maxi:
+        raise Exception('Max iterations reached in advect_nodes_carefully')
+    #print(f'Iteration {i}: {len(neg_elems)} negative elements, {len(neg_nodes)} affected nodes')
+    return advect_nodes_carefully(x0, y0, u0, v0, t, i+1, maxi)
+
 def get_mesh_files(idate, lag_dir, mesh_init_file):
     mesh_src_dir = idate.strftime(f'{lag_dir}/%Y')
     mesh_src_file = idate.strftime(f'{mesh_src_dir}/mesh_%Y%m%d.zip')
@@ -185,13 +201,29 @@ def compute_mapping(tri_a, tri_o, search_dist, cores=4):
     weights = np.array(weights)
     return src2dst, weights
 
+def compute_mapping_grid(tri_a, tri_o, xgrid, ygrid):
+    tfa = tri_a.get_trifinder()
+    tfo = tri_o.get_trifinder()    
+    idxa = tfa(xgrid, ygrid)
+    idxo = tfo(xgrid, ygrid)    
+
+    valid_idx = (idxa >= 0) & (idxo >= 0)
+
+    idxao32 = np.stack([idxa[valid_idx], idxo[valid_idx]], axis=-1).astype(np.uint32)
+    idxao64 = idxao32.view(np.uint64).reshape(-1)
+    idxao64_unq, weights = np.unique(idxao64, return_counts=True)
+    src2dst = idxao64_unq.view(np.uint32).reshape(-1, 2)
+    return src2dst, weights
+
 def get_area_ratio(tri0, tri_a, tri_o, src2dst, weights):
     area0 = get_area(tri0.x, tri0.y, tri0.triangles)
     area1 = get_area(tri_a.x, tri_a.y, tri_a.triangles)
     area_ratio1 = area1 / area0
-    area_ratio7 = np.zeros(tri_o.triangles.shape[0]) + 0
-    np.add.at(area_ratio7, src2dst[:,1], area_ratio1[src2dst[:,0]] * weights)
-    return area_ratio7
+    area_ratio7 = np.zeros(tri_o.triangles.shape[0])
+    area_weights = np.zeros(tri_o.triangles.shape[0])
+    np.add.at(area_ratio7, src2dst[:, 1], area_ratio1[src2dst[:, 0]] * weights)
+    np.add.at(area_weights, src2dst[:, 1], weights)
+    return area_ratio7 / area_weights
 
 def fill_gaps(array, mask, distance=15):
     """ Fill gaps in input raster
