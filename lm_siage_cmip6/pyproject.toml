@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "lm-siage-cmip6"
+version = "0.1.0"
+description = "Lagrangian sea-ice-age workflow for CMIP6 model output"
+readme = "README.md"
+requires-python = ">=3.11,<3.12"
+dependencies = [
+  "numpy>=1.26,<2",
+  "scipy>=1.11,<1.12",
+  "netCDF4>=1.6,<2",
+  "cftime>=1.6,<2",
+  "pyproj>=3.6,<4",
+  "PyYAML>=6,<7",
+  "tqdm>=4.66,<5",
+]
+
+[project.optional-dependencies]
+test = ["pytest>=7.4,<8"]
+build = ["Cython>=3,<4"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"

@@ -1,0 +1,35 @@
+# Python
+__pycache__/
+*.py[cod]
+*.so
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+
+# Environments
+.venv/
+env/
+
+# Generated data
+work/*
+!work/mesh/
+!work/sic/
+!work/age/
+!work/grid/
+work/mesh/*
+work/sic/*
+work/age/*
+work/grid/*
+
+output/*
+!output/netcdf/
+output/netcdf/*
+
+logs/*
+data/input/*
+
+# macOS
+.DS_Store
+
+# Jupyter
+.ipynb_checkpoints/

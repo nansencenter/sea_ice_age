@@ -11,6 +11,19 @@ This repository contains code for computing the age of sea ice using satellite d
 - Outputs age maps in standard formats (e.g., NetCDF, GeoTIFF)
 - Modular and extensible codebase
 
+## CMIP6 climate-model workflow
+
+The branch addition in [`lm_siage_cmip6/`](lm_siage_cmip6/) adapts the
+Lagrangian algorithm to daily CMIP6 `siconc`, `siu`, and `siv` model output.
+It includes native-grid vector rotation and remapping, annual checkpoint and
+restart support, historical-to-scenario handoff, verification data, and
+server-oriented Python scripts. The observational notebooks and their existing
+workflow remain unchanged.
+
+See the [CMIP6 workflow README](lm_siage_cmip6/README.md) for input naming,
+scientific switches, output contents, local testing, and the NIRD/server
+quick-start procedure.
+
 ## Installation
 
 Clone the repository and install dependencies:
@@ -73,4 +86,3 @@ For questions or contributions, open an issue or contact the maintainer.
 Korosov, A., Edel, L., Regan, H., Lavergne, T., Aaboe, S., and Down, E. J.: A climate data record of sea ice age using Lagrangian advection of a triangular mesh, Earth Syst. Sci. Data, 18, 721–740, https://doi.org/10.5194/essd-18-721-2026, 2026.
 
 Korosov, A. A., Rampal, P., Pedersen, L. T., Saldo, R., Ye, Y., Heygster, G., Lavergne, T., Aaboe, S., and Girard-Ardhuin, F.: A new tracking algorithm for sea ice age distribution estimation, The Cryosphere, 12, 2073–2085, https://doi.org/10.5194/tc-12-2073-2018, 2018.
-
