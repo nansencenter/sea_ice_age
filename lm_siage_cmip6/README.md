@@ -58,6 +58,11 @@ pytest -q
 
 The BAMG extension must match Python 3.11 and the platform.  The current macOS
 build cannot be copied to Linux; build BAMG under Python 3.11 on NIRD.
+BAMG uses randomized vertex insertion by default. Although its C++ code resets
+a fixed seed, the C-library `rand()` sequence is platform-specific, so macOS
+and Linux meshes are not expected to be bit-for-bit identical. Each platform's
+annual restart files must therefore be continued on that platform rather than
+replaced with checkpoints from another build.
 
 List the selected source years without writing data:
 
@@ -124,7 +129,8 @@ not because observations are noisy:
 - area-ratio correction for convergence and divergence;
 - capping transported ice by the model concentration at the destination time;
 - fixed outer mesh nodes, provided the buffered boundary remains outside ice;
-- local velocity halving only when a full daily step would invert a triangle;
+- local velocity halving only when a full daily step would invert a triangle
+  in floating-point or BAMG's integer-coordinate geometry;
 - non-negative, nested cumulative age cohorts.
 
 ### Model-data switches
@@ -214,7 +220,10 @@ hundreds to thousands of nodes. The run remained valid, but this is too common
 to treat as an occasional fallback in a centuries-long production archive.
 Before production, compare this daily-step result with a sub-daily advection
 sensitivity or revised mesh strategy; do not silently disable the inversion
-protection.
+protection. The safeguard checks both floating-point triangle area and BAMG's
+fixed integer-coordinate representation. The second check prevents a very thin
+positive triangle from changing sign through BAMG coordinate quantization
+immediately before remeshing.
 
 The completed original-setting run is preserved. The independent revised test
 uses:

@@ -9,6 +9,9 @@ from .io import velocity_km_day
 from .vectors import east_north_to_projected
 
 
+BAMG_MAX_INTEGER_COORDINATE = 1073741823
+
+
 def signed_area(x: np.ndarray, y: np.ndarray, triangles: np.ndarray) -> np.ndarray:
     points = np.column_stack((x, y))[triangles]
     return 0.5 * (
@@ -16,6 +19,43 @@ def signed_area(x: np.ndarray, y: np.ndarray, triangles: np.ndarray) -> np.ndarr
         (points[:, 2, 1] - points[:, 0, 1]) -
         (points[:, 2, 0] - points[:, 0, 0]) *
         (points[:, 1, 1] - points[:, 0, 1])
+    )
+
+
+def bamg_integer_determinant(
+    x: np.ndarray, y: np.ndarray, triangles: np.ndarray
+) -> np.ndarray:
+    """Return determinants after reproducing BAMG's coordinate quantization.
+
+    BAMG expands each coordinate range by five percent at both ends, maps the
+    longer expanded range to ``2**30 - 1``, truncates coordinates to integers,
+    and rejects any triangle whose integer determinant is non-positive. A very
+    thin triangle can have positive floating-point area yet change sign during
+    this conversion, so the pre-remeshing safeguard must check the same
+    representation.
+    """
+    x = np.asarray(x, dtype=np.float64)
+    y = np.asarray(y, dtype=np.float64)
+    x_span = float(np.max(x) - np.min(x))
+    y_span = float(np.max(y) - np.min(y))
+    expanded_x_span = 1.1 * x_span
+    expanded_y_span = 1.1 * y_span
+    maximum_span = max(expanded_x_span, expanded_y_span)
+    if not np.isfinite(maximum_span) or maximum_span <= 0:
+        raise ValueError("BAMG coordinate range must be finite and positive")
+
+    x_min = float(np.min(x) - 0.05 * x_span)
+    y_min = float(np.min(y) - 0.05 * y_span)
+    scale = BAMG_MAX_INTEGER_COORDINATE / maximum_span
+    integer_x = np.asarray(scale * (x - x_min), dtype=np.int64)
+    integer_y = np.asarray(scale * (y - y_min), dtype=np.int64)
+    points_x = integer_x[triangles]
+    points_y = integer_y[triangles]
+    return (
+        (points_x[:, 1] - points_x[:, 0]) *
+        (points_y[:, 2] - points_y[:, 0]) -
+        (points_y[:, 1] - points_y[:, 0]) *
+        (points_x[:, 2] - points_x[:, 0])
     )
 
 
@@ -184,6 +224,9 @@ def advect_nodes_carefully(
 
     The correction follows the reference routine: speeds at nodes belonging to
     inverted elements are repeatedly halved until all signed areas are positive.
+    The same check is also made after BAMG's integer-coordinate conversion,
+    because BAMG rejects near-degenerate triangles that change sign when
+    quantized even if their floating-point area remains slightly positive.
     """
     u = np.asarray(u_km_day, dtype=np.float64).copy()
     v = np.asarray(v_km_day, dtype=np.float64).copy()
@@ -191,7 +234,10 @@ def advect_nodes_carefully(
     for iteration in range(maximum_iterations + 1):
         x_new = x + u
         y_new = y + v
-        inverted = signed_area(x_new, y_new, triangles) <= 0
+        inverted = (
+            (signed_area(x_new, y_new, triangles) <= 0) |
+            (bamg_integer_determinant(x_new, y_new, triangles) <= 0)
+        )
         if not inverted.any():
             return x_new, y_new, iteration, len(affected)
         nodes = np.unique(triangles[inverted])

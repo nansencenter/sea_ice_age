@@ -2,6 +2,7 @@ import numpy as np
 
 from lm_siage_cmip6.advection import (
     advect_nodes_carefully,
+    bamg_integer_determinant,
     boundary_nodes,
     compute_element_mapping,
     fill_missing_velocity_nearest,
@@ -32,6 +33,30 @@ def test_uniform_translation_preserves_area():
     )
     assert iterations == 0
     assert affected == 0
+
+
+def test_advection_avoids_triangle_inversion_after_bamg_quantization():
+    # The distant fourth node makes BAMG's integer grid coarse enough that the
+    # proposed displacement leaves a positive floating-point triangle which
+    # nevertheless collapses to zero integer area.
+    x = np.array([0.0, 1.0, 0.0, 10000.0])
+    y = np.array([0.0, 0.0, 1.0, 10000.0])
+    triangles = np.array([[0, 1, 2]], dtype=np.int32)
+    u = np.zeros(4)
+    v = np.array([0.0, 0.0, -0.999999999, 0.0])
+    proposed_x = x + u
+    proposed_y = y + v
+    assert signed_area(proposed_x, proposed_y, triangles)[0] > 0
+    assert bamg_integer_determinant(proposed_x, proposed_y, triangles)[0] <= 0
+
+    x_new, y_new, iterations, affected = advect_nodes_carefully(
+        x, y, u, v, triangles
+    )
+
+    assert iterations == 1
+    assert affected == 3
+    assert signed_area(x_new, y_new, triangles)[0] > 0
+    assert bamg_integer_determinant(x_new, y_new, triangles)[0] > 0
 
 
 def test_identical_mesh_mapping_weights_sum_to_one():
