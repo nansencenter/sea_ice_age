@@ -531,10 +531,15 @@ permitted this workload on a login node.
    service):
 
    ```bash
-   export REMOTE_BASE=/projects/NS9588K/SeaIceAge
-   export REMOTE_WORK=/nird/datapeak/NS9588K/SeaIceAge
+   export PROJECT_STORAGE_ROOT=PATH_TO_PROJECT_STORAGE
+   export SCRATCH_STORAGE_ROOT=PATH_TO_SCRATCH_STORAGE
+   export REMOTE_BASE="$PROJECT_STORAGE_ROOT/SeaIceAge"
+   export REMOTE_WORK="$SCRATCH_STORAGE_ROOT/SeaIceAge"
    export WORKFLOW_DIR="$REMOTE_BASE/lm_siage_cmip6"
    ```
+
+   Replace the two `PATH_TO_...` placeholders with the current NIRD project
+   and scratch roots before running the remaining commands.
 
    `WORKFLOW_DIR` above matches the tested direct-copy deployment. If this
    GitHub repository is cloned as a whole, set it to
