@@ -59,17 +59,45 @@ def copy_time_slice(source: Path, destination: Path, start: int, stop: int) -> N
                 output[...] = variable[...]
 
 
-def output_is_complete(path: Path, expected_count: int) -> bool:
+def output_is_complete(
+    path: Path,
+    expected_count: int,
+    require_drift_completion: bool = False,
+) -> bool:
     if not path.is_file():
         return False
     try:
         with Dataset(path) as dataset:
-            return (
+            complete = (
                 int(getattr(dataset, "remapping_complete", 0)) == 1
                 and int(getattr(dataset, "static_status_repeated", 0)) == 1
                 and len(dataset.dimensions["time"]) == expected_count
                 and {"siu", "siv", "siconc"}.issubset(dataset.variables)
             )
+            if require_drift_completion:
+                unresolved = int(
+                    getattr(
+                        dataset,
+                        "drift_completion_unresolved_cell_times",
+                        -1,
+                    )
+                )
+                complete = (
+                    complete
+                    and int(getattr(dataset, "drift_completion_enabled", 0)) == 1
+                    and int(getattr(dataset, "drift_completion_complete", 0)) == 1
+                    and unresolved >= 0
+                    and (
+                        unresolved == 0
+                        or int(
+                            getattr(dataset, "drift_exclusion_complete", 0)
+                        ) == 1
+                    )
+                    and {"drift_supported", "siconc_for_age"}.issubset(
+                        dataset.variables
+                    )
+                )
+            return complete
     except (OSError, KeyError, ValueError):
         return False
 
@@ -127,7 +155,9 @@ def write_verification(
     data_variables: set[str] | None = None,
 ) -> None:
     """Write a compact NetCDF containing selected first remapped records."""
-    data_variables = data_variables or {"siu", "siv", "siconc"}
+    data_variables = data_variables or {
+        "siu", "siv", "siconc", "siconc_for_age", "drift_supported",
+    }
     keep = {
         "time", "time_bnds", "x", "y", "longitude", "latitude",
         "status_flag", "Lambert_Azimuthal_Equal_Area",
@@ -227,6 +257,32 @@ def main() -> None:
         f"{selection['variant']}: {triplets[0].year}..{triplets[-1].year}"
     )
     temp_root = resolve_path(config, preprocess.get("temporary_dir", "work/remapping/tmp"))
+    complete_drift_on_ice = bool(
+        preprocess.get("complete_drift_on_ice", True)
+    )
+    ice_threshold_percent = 100.0 * float(
+        preprocess.get(
+            "drift_completion_concentration_threshold",
+            config["ice"]["concentration_threshold"],
+        )
+    )
+    drift_completion_max_distance_km = float(
+        preprocess.get(
+            "drift_completion_max_distance_km",
+            config.get("mesh", {}).get(
+                "nearest_drift_max_distance_km",
+                300.0,
+            ),
+        )
+    )
+    unresolved_ice_drift_policy = preprocess.get(
+        "unresolved_ice_drift_policy",
+        "error",
+    )
+    if unresolved_ice_drift_policy not in {"error", "exclude"}:
+        raise ValueError(
+            "preprocess.unresolved_ice_drift_policy must be error or exclude"
+        )
     if not args.dry_run:
         output_dir.mkdir(parents=True, exist_ok=True)
         weights.parent.mkdir(parents=True, exist_ok=True)
@@ -240,7 +296,11 @@ def main() -> None:
         )
         output = output_dir / filename
         first_output = first_output or output
-        if output_is_complete(output, len(triplet.date_keys)) and not args.force:
+        if output_is_complete(
+            output,
+            len(triplet.date_keys),
+            require_drift_completion=complete_drift_on_ice,
+        ) and not args.force:
             print(f"Skipping complete remapped year {triplet.year}: {output}")
             continue
         print(
@@ -294,6 +354,20 @@ def main() -> None:
                 ])
             if preprocess.get("auto_clip_siconc", True):
                 command.append("--auto_clip_siconc")
+            if complete_drift_on_ice:
+                command.extend([
+                    "--complete_drift_on_ice",
+                    "--ice_threshold_percent", str(ice_threshold_percent),
+                    "--drift_fill_max_distance",
+                    str(1000.0 * drift_completion_max_distance_km),
+                    "--drift_fill_donor_domain",
+                    preprocess.get(
+                        "drift_completion_donor_domain",
+                        "non_land",
+                    ),
+                    "--unresolved_ice_drift_policy",
+                    unresolved_ice_drift_policy,
+                ])
             print(shlex.join(command), flush=True)
             subprocess.run(command, cwd=remapper.parent, check=True)
             repeat_static_status(partial, preprocess.get("target_mask_var", "status_flag"))

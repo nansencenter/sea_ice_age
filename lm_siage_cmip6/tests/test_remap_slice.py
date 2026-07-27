@@ -51,3 +51,63 @@ def test_static_status_is_repeated_across_time(tmp_path):
         assert int(dataset.static_status_repeated) == 1
         for index in range(3):
             np.testing.assert_array_equal(dataset.variables["status_flag"][index], status)
+
+
+def test_completion_is_required_for_restart_when_configured(tmp_path):
+    output = tmp_path / "remapped.nc"
+    with Dataset(output, "w") as dataset:
+        dataset.createDimension("time", 2)
+        dataset.createDimension("y", 1)
+        dataset.createDimension("x", 1)
+        for name in ("siu", "siv", "siconc"):
+            dataset.createVariable(name, "f4", ("time", "y", "x"))
+        dataset.remapping_complete = np.int8(1)
+        dataset.static_status_repeated = np.int8(1)
+
+    assert MODULE.output_is_complete(output, 2)
+    assert not MODULE.output_is_complete(
+        output,
+        2,
+        require_drift_completion=True,
+    )
+
+    with Dataset(output, "a") as dataset:
+        dataset.createVariable(
+            "siconc_for_age", "f4", ("time", "y", "x")
+        )
+        dataset.createVariable(
+            "drift_supported", "u1", ("time", "y", "x")
+        )
+        dataset.drift_completion_enabled = np.int8(1)
+        dataset.drift_completion_complete = np.int8(1)
+        dataset.drift_completion_unresolved_cell_times = np.int64(0)
+
+    assert MODULE.output_is_complete(
+        output,
+        2,
+        require_drift_completion=True,
+    )
+
+
+def test_excluded_drift_gaps_are_complete_for_restart(tmp_path):
+    output = tmp_path / "remapped.nc"
+    with Dataset(output, "w") as dataset:
+        dataset.createDimension("time", 2)
+        dataset.createDimension("y", 1)
+        dataset.createDimension("x", 1)
+        for name in (
+            "siu", "siv", "siconc", "siconc_for_age", "drift_supported",
+        ):
+            dataset.createVariable(name, "f4", ("time", "y", "x"))
+        dataset.remapping_complete = np.int8(1)
+        dataset.static_status_repeated = np.int8(1)
+        dataset.drift_completion_enabled = np.int8(1)
+        dataset.drift_completion_complete = np.int8(1)
+        dataset.drift_completion_unresolved_cell_times = np.int64(3)
+        dataset.drift_exclusion_complete = np.int8(1)
+
+    assert MODULE.output_is_complete(
+        output,
+        2,
+        require_drift_completion=True,
+    )

@@ -142,6 +142,16 @@ code changes:
 preprocess:
   drift_extent_mode: none
   remap_neighbours: 4
+  complete_drift_on_ice: true
+  drift_completion_concentration_threshold: 0.10
+  drift_completion_max_distance_km: 50.0
+  drift_completion_donor_domain: non_land
+  unresolved_ice_drift_policy: exclude
+
+variables:
+  concentration: siconc_for_age
+  model_concentration: siconc
+  drift_support_mask: drift_supported
 
 ice:
   sic_interpolation_mode: model_linear  # or legacy_zero_fill
@@ -164,6 +174,14 @@ LAEA cells to moving mesh nodes/elements. It does not perform an observational
 coastal correction: bilinear weights are renormalized over finite model-ocean
 cells, so land/fill cells are not treated as zero-concentration or zero-drift
 ocean.
+
+The remapper preserves the original remapped concentration in `siconc` and
+writes the explicit `drift_supported` mask. Where concentration is at least
+10%, missing drift is completed only from a non-land donor within 50 km.
+Unresolved cells remain visible in `siconc` but are masked from
+`siconc_for_age`; no zero drift is silently assigned. Annual remapped files
+record repair, exclusion, and repair-distance diagnostics in their global
+attributes.
 
 The fully strict `error` test showed that NorESM2-MM drift is not defined over
 the entire ice-free buffer mesh. On the first test day, 5,136 non-boundary mesh
@@ -386,7 +404,8 @@ Use the same scientific switches for the historical run and every scenario.
    CMIP6 filename fields. Do not combine variants.
 
 4. Create one historical YAML config. Set the model, `historical`, variant,
-   source directory, server target-grid/remapper paths, model-specific weights,
+   source directory, server target-grid path, bundled generic remapper,
+   model-specific weights,
    work directory, and output directory. Use the recommended model switches
    above. Every historical work path should contain
    `<model>/historical/<variant>`. Put the high-frequency `mesh`, `sic`, `age`,
@@ -395,6 +414,19 @@ Use the same scientific switches for the historical run and every scenario.
    storage. For example:
 
    ```yaml
+   preprocess:
+     remapper_script: scripts/remap_cmip6_sea_ice.py
+     complete_drift_on_ice: true
+     drift_completion_concentration_threshold: 0.10
+     drift_completion_max_distance_km: 50.0
+     drift_completion_donor_domain: non_land
+     unresolved_ice_drift_policy: exclude
+
+   variables:
+     concentration: siconc_for_age
+     model_concentration: siconc
+     drift_support_mask: drift_supported
+
    work_dir: /cluster/scratch/$USER/lm_siage/MODEL/historical/VARIANT
    output_dir: /cluster/projects/PROJECT/lm_siage/output/netcdf
 

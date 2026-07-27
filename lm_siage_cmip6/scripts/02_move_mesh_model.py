@@ -126,6 +126,7 @@ def main() -> None:
         active_missing = missing.copy()
         active_missing[fixed_nodes] = False
         blocking_missing = active_missing.copy()
+        missing_on_ice_count: int | None = None
         repaired_distances = np.empty(0, dtype=np.float64)
         if missing_drift_policy in {"error_on_ice", "nearest_on_ice"}:
             element_points = np.column_stack((
@@ -142,6 +143,7 @@ def main() -> None:
             if ice_elements.any():
                 ice_nodes[np.unique(triangles[ice_elements])] = True
             blocking_missing &= ice_nodes
+            missing_on_ice_count = int(blocking_missing.sum())
             inactive_missing = active_missing & ~ice_nodes
             u[inactive_missing] = 0.0
             v[inactive_missing] = 0.0
@@ -154,7 +156,7 @@ def main() -> None:
         if missing_drift_policy in {"error", "error_on_ice", "nearest_on_ice"} and blocking_missing.any():
             raise RuntimeError(
                 f"{source_record.key}: drift is missing at "
-                f"{int(blocking_missing.sum())} protected mesh nodes. "
+                f"{int(blocking_missing.sum())} required mesh nodes. "
                 "The configured model-data policy will not replace it with zero motion."
             )
         advected_x, advected_y, correction_iterations, affected_nodes = (
@@ -194,7 +196,8 @@ def main() -> None:
             f"{source_record.key}->{destination_record.key}: "
             f"nodes={len(destination_x)}, triangles={len(destination_t)}, "
             f"missing_drift={active_missing.mean():.1%}, "
-            f"missing_protected={int(blocking_missing.sum())}, "
+            f"missing_nonboundary={int(active_missing.sum())}, "
+            f"missing_on_ice={missing_on_ice_count if missing_on_ice_count is not None else 'not_evaluated'}, "
             f"nearest_drift_repairs={len(repaired_distances)}, "
             f"maximum_repair_distance={repaired_distances.max() if len(repaired_distances) else 0:.2f} km, "
             f"fixed_boundary_nodes={len(fixed_nodes)}, "

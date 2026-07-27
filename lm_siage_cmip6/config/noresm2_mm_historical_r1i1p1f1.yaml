@@ -12,18 +12,23 @@ preprocess:
   remapped_dir: work/NorESM2-MM/historical/r1i1p1f1/remapped
   temporary_dir: work/NorESM2-MM/historical/r1i1p1f1/remapping_tmp
   target_grid_file: /Users/ricavy/Library/CloudStorage/OneDrive-NERSC/Desktop/Remapping_CMIP6/Full_test/Grid_example.nc
-  remapper_script: /Users/ricavy/Library/CloudStorage/OneDrive-NERSC/Desktop/Remapping_CMIP6/Full_test/Perturbation_method/Remapping_operational_CMCC-CM2-SR5.py
+  remapper_script: scripts/remap_cmip6_sea_ice.py
   weights_file: work/NorESM2-MM/historical/r1i1p1f1/remapping_weights.npz
   verification_file: output/verification_data/NorESM2-MM/RemappedInputVerification_NorESM2-MM_historical_r1i1p1f1_first10.nc
   sic_verification_file: output/verification_data/NorESM2-MM/RemappedSICVerification_NorESM2-MM_historical_r1i1p1f1_first10.nc
   verification_timesteps: 10
   time_chunk: 50
   target_mask_mode: land_only
-  drift_extent_mode: nearest
+  drift_extent_mode: none
   remap_neighbours: 4
   remap_power: 1.0
   remap_max_distance_m: 500000.0
   minimum_valid_drift_weight: 0.5
+  complete_drift_on_ice: true
+  drift_completion_concentration_threshold: 0.10
+  drift_completion_max_distance_km: 50.0
+  drift_completion_donor_domain: non_land
+  unresolved_ice_drift_policy: exclude
   fix_index_block: true
   index_block_start: 214
   index_block_end: 218
@@ -46,7 +51,9 @@ output:
   maximum_age_classes: 6
 
 variables:
-  concentration: siconc
+  concentration: siconc_for_age
+  model_concentration: siconc
+  drift_support_mask: drift_supported
   eastward_velocity: siu
   northward_velocity: siv
   status_flag: status_flag
