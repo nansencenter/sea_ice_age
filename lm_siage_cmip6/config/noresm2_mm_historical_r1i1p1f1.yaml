@@ -11,7 +11,7 @@ preprocess:
   recursive: false
   remapped_dir: work/NorESM2-MM/historical/r1i1p1f1/remapped
   temporary_dir: work/NorESM2-MM/historical/r1i1p1f1/remapping_tmp
-  target_grid_file: /Users/ricavy/Library/CloudStorage/OneDrive-NERSC/Desktop/Remapping_CMIP6/Full_test/Grid_example.nc
+  target_grid_file: assets/Grid_example.nc
   remapper_script: scripts/remap_cmip6_sea_ice.py
   weights_file: work/NorESM2-MM/historical/r1i1p1f1/remapping_weights.npz
   verification_file: output/verification_data/NorESM2-MM/RemappedInputVerification_NorESM2-MM_historical_r1i1p1f1_first10.nc

@@ -427,22 +427,22 @@ Use the same scientific switches for the historical run and every scenario.
      model_concentration: siconc
      drift_support_mask: drift_supported
 
-   work_dir: /cluster/scratch/$USER/lm_siage/MODEL/historical/VARIANT
-   output_dir: /cluster/projects/PROJECT/lm_siage/output/netcdf
+   work_dir: SCRATCH_ROOT/lm_siage/MODEL/historical/VARIANT
+   output_dir: PROJECT_ROOT/lm_siage/output/netcdf
 
    mesh:
-     initial_mesh_file: /cluster/scratch/$USER/lm_siage/MODEL/historical/VARIANT/mesh/mesh_initial.npz
-     daily_mesh_dir: /cluster/scratch/$USER/lm_siage/MODEL/historical/VARIANT/mesh/daily
+     initial_mesh_file: SCRATCH_ROOT/lm_siage/MODEL/historical/VARIANT/mesh/mesh_initial.npz
+     daily_mesh_dir: SCRATCH_ROOT/lm_siage/MODEL/historical/VARIANT/mesh/daily
    ice:
-     daily_sic_dir: /cluster/scratch/$USER/lm_siage/MODEL/historical/VARIANT/sic/daily
+     daily_sic_dir: SCRATCH_ROOT/lm_siage/MODEL/historical/VARIANT/sic/daily
    age:
-     daily_age_dir: /cluster/scratch/$USER/lm_siage/MODEL/historical/VARIANT/age/daily
-     gridded_age_dir: /cluster/scratch/$USER/lm_siage/MODEL/historical/VARIANT/grid/daily
+     daily_age_dir: SCRATCH_ROOT/lm_siage/MODEL/historical/VARIANT/age/daily
+     gridded_age_dir: SCRATCH_ROOT/lm_siage/MODEL/historical/VARIANT/grid/daily
    ```
 
-   Replace `$USER` with its literal value if the batch system does not expand
-   environment variables inside YAML. Preserve at least the final daily mesh
-   and age checkpoint on durable storage whenever scratch may be purged.
+   Replace `SCRATCH_ROOT` and `PROJECT_ROOT` with absolute server paths in the
+   runtime YAML. Preserve at least the final daily mesh and age checkpoint on
+   durable storage whenever scratch may be purged.
 
 5. Confirm file selection without writing:
 
