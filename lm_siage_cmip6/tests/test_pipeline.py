@@ -10,6 +10,7 @@ from lm_siage_cmip6.pipeline import (
     enforce_cumulative_nesting,
     latest_complete_output,
     propagate_element_field,
+    resolve_age_start,
     select_recent_cohort_names,
 )
 
@@ -66,6 +67,12 @@ def test_only_six_newest_annual_cohorts_are_selected():
     assert select_recent_cohort_names(data, 6) == [
         f"sic{year}0930" for year in range(1851, 1857)
     ]
+
+
+def test_age_start_is_clamped_to_first_autumn_checkpoint():
+    assert resolve_age_start(None, "18500915") == "18500915"
+    assert resolve_age_start("18500101", "18500915") == "18500915"
+    assert resolve_age_start("18510101", "18500915") == "18510101"
 
 
 def _write_complete_output(path, date_key):

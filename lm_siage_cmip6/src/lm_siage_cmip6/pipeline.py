@@ -115,6 +115,13 @@ def current_experiment_start(config: dict, catalog) -> str:
     return records[0].key
 
 
+def resolve_age_start(requested_start: str | None, initial_key: str) -> str:
+    """Start age propagation no earlier than its first autumn checkpoint."""
+    if requested_start is None:
+        return initial_key
+    return max(requested_start, initial_key)
+
+
 def require_checkpoint_state(config: dict, checkpoint: OutputCheckpoint) -> None:
     """Ensure the Lagrangian state needed to continue is still available.
 

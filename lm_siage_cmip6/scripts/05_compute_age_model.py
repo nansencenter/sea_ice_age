@@ -12,6 +12,7 @@ from lm_siage_cmip6.pipeline import (
     enforce_cumulative_nesting,
     load_npz,
     propagate_element_field,
+    resolve_age_start,
     save_npz,
     select_recent_cohort_names,
 )
@@ -43,7 +44,12 @@ def main() -> None:
     if not initial_files:
         raise FileNotFoundError("Run 04_find_autumn_minima_model.py first")
     initial_key = initial_files[0].stem.split("_")[-1]
-    start = args.start or initial_key
+    start = resolve_age_start(args.start, initial_key)
+    if args.start is not None and start != args.start:
+        print(
+            f"Requested age start {args.start} precedes the first autumn "
+            f"checkpoint; starting from {start} instead"
+        )
     records = catalog.select(start, args.stop)
     if not records or records[0].key != start:
         raise ValueError(f"Start date {start} is not in the input catalog")
