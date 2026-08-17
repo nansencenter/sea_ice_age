@@ -107,7 +107,7 @@ def cleanup_missing_files():
     with get_session() as session:
         from sqlalchemy import select
         paths = session.execute(select(File.path)).scalars().all()
-        missing = [p for p in paths if not os.path.exists(p)]
+        missing = [p for p in tqdm(paths) if not os.path.exists(p)]
         if not missing:
             return
         # delete in bulk; arrays are removed via cascade

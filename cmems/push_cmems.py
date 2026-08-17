@@ -190,7 +190,7 @@ def upload_dnt_file(dnt_filename: str, product: str = PRODUCT):
     """Upload DNT file to remote server."""
     remote_dnt_dir = f'{product}/DNT'
     local_dnt_path = f'DNT/{dnt_filename}'
-    lftp_cmd = f"cd {remote_dnt_dir} && put {local_dnt_path}"
+    lftp_cmd = f"cd {remote_dnt_dir} && put -a {local_dnt_path}"
     run_lftp_command(lftp_cmd)
     sleep(SLEEP_PUSH_SECONDS)
 
@@ -227,7 +227,7 @@ def download_response_file(dnt_filename: str, product: str = PRODUCT):
     remote_resp_dir = f'{product}/DNT_response'
     remote_resp_filename = f'{remote_resp_dir}/{dnt_filename.replace(".xml", "_response.xml")}'
     local_resp_filename = os.path.basename(remote_resp_filename)
-    lftp_cmd = f"set xfer:clobber on; cd {remote_resp_dir} && get {local_resp_filename} -o DNT_response/{local_resp_filename}"
+    lftp_cmd = f"set xfer:clobber on; cd {remote_resp_dir} && get -a {local_resp_filename} -o DNT_response/{local_resp_filename}"
     
     print(f"Waiting {SLEEP_RESPONSE_SECONDS}s for response file...")
     sleep(SLEEP_RESPONSE_SECONDS)
@@ -326,6 +326,7 @@ def process_directory(input_dir: str, root_cmems_dir: str, force: bool) -> bool:
     print(f'Creating DNT file: {dnt_filename}')
     with open(f'DNT/{dnt_filename}', 'w') as f:
         f.write(xml_content)
+    sleep(1)  # Ensure file is written before upload
     
     # Upload DNT file
     upload_dnt_file(dnt_filename)
