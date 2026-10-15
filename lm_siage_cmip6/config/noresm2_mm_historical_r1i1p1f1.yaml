@@ -1,0 +1,104 @@
+dataset:
+  # Edit these fields to select one CMIP6 realization from data/input.
+  model: NorESM2-MM
+  experiment: historical
+  variant: r1i1p1f1
+  table: SIday
+  grid_label: gn
+
+preprocess:
+  source_dir: data/input
+  recursive: false
+  remapped_dir: work/NorESM2-MM/historical/r1i1p1f1/remapped
+  temporary_dir: work/NorESM2-MM/historical/r1i1p1f1/remapping_tmp
+  target_grid_file: assets/Grid_example.nc
+  remapper_script: scripts/remap_cmip6_sea_ice.py
+  weights_file: work/NorESM2-MM/historical/r1i1p1f1/remapping_weights.npz
+  verification_file: output/verification_data/NorESM2-MM/RemappedInputVerification_NorESM2-MM_historical_r1i1p1f1_first10.nc
+  sic_verification_file: output/verification_data/NorESM2-MM/RemappedSICVerification_NorESM2-MM_historical_r1i1p1f1_first10.nc
+  verification_timesteps: 10
+  time_chunk: 50
+  target_mask_mode: land_only
+  drift_extent_mode: none
+  remap_neighbours: 4
+  remap_power: 1.0
+  remap_max_distance_m: 500000.0
+  minimum_valid_drift_weight: 0.5
+  complete_drift_on_ice: true
+  drift_completion_concentration_threshold: 0.10
+  drift_completion_max_distance_km: 50.0
+  drift_completion_donor_domain: non_land
+  unresolved_ice_drift_policy: exclude
+  fix_index_block: true
+  index_block_start: 214
+  index_block_end: 218
+  index_block_pad: 3
+  block_method: idw
+  block_idw_power: 2.0
+  auto_clip_siconc: true
+
+input_file: work/NorESM2-MM/historical/r1i1p1f1/remapped/RemappedInput_NorESM2-MM_historical_r1i1p1f1_1850_LAEA.nc
+input_pattern: work/NorESM2-MM/historical/r1i1p1f1/remapped/RemappedInput_NorESM2-MM_historical_r1i1p1f1_*_LAEA.nc
+work_dir: work/NorESM2-MM/historical/r1i1p1f1
+output_dir: output/netcdf
+
+output:
+  filename_template: "SeaIceAge_{model}_{experiment}_{variant}_{year}.nc"
+  sea_ice_age_name: sea_ice_age
+  export_age_fractions: true
+  export_uncertainty: false
+  export_longitude_latitude: true
+  maximum_age_classes: 6
+
+variables:
+  concentration: siconc_for_age
+  model_concentration: siconc
+  drift_support_mask: drift_supported
+  eastward_velocity: siu
+  northward_velocity: siv
+  status_flag: status_flag
+  longitude: longitude
+  latitude: latitude
+
+projection:
+  proj4: "+proj=laea +lat_0=90 +lon_0=0 +x_0=0 +y_0=0 +datum=WGS84 +units=m +no_defs +type=crs"
+
+units:
+  internal_distance: km
+  internal_time: day
+
+ice:
+  concentration_threshold: 0.15
+  autumn_search_start: "08-15"
+  autumn_search_stop: "09-15"
+  # Baseline switches retained so the completed 1850-1859 run remains exactly
+  # reproducible. Use the model_switch_test config for the revised experiment.
+  sic_interpolation_mode: legacy_zero_fill
+  missing_sic_policy: zero
+  daily_sic_dir: work/NorESM2-MM/historical/r1i1p1f1/sic/daily
+
+age:
+  daily_age_dir: work/NorESM2-MM/historical/r1i1p1f1/age/daily
+  gridded_age_dir: work/NorESM2-MM/historical/r1i1p1f1/grid/daily
+  maximum_age_classes: 6
+  year_length_days: 365.0
+  clip_autumn_area_ratio: true
+  autumn_area_ratio_clip: [0.97642671, 1.02437728]
+
+mesh:
+  nominal_spacing_km: 25.0
+  bamg_hmin_km: 15.0
+  bamg_hmax_km: 25.0
+  minimum_latitude: 45.0
+  ice_domain_buffer_cells: 12
+  initial_mesh_file: work/NorESM2-MM/historical/r1i1p1f1/mesh/mesh_initial.npz
+  daily_mesh_dir: work/NorESM2-MM/historical/r1i1p1f1/mesh/daily
+  mapping_subdivisions: 3
+  maximum_advection_iterations: 100
+  fixed_boundary_layers: 1
+  drift_interpolation_mode: legacy_zero_fill
+  missing_drift_policy: zero
+
+diagnostics:
+  drift_snapshot_dir: work/NorESM2-MM/historical/r1i1p1f1/diagnostics/drift
+  vector_stride: 10
