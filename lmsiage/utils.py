@@ -5,27 +5,66 @@ import os
 
 from matplotlib.tri import Triangulation
 import numpy as np
-from shapely.geometry import Polygon
+from numba import njit, prange
 from scipy.interpolate import RectBivariateSpline
 from scipy.spatial import KDTree
 from scipy.ndimage import distance_transform_edt
 
-from .remeshing import (
-    get_area,
-    remove_small_elements,
-    collapse_short_edges,
-    remove_hanging_elements,
-    collapse_small_angle_edges,
-    remove_long_edges,
-    get_same_elements,
-    measure,
-    laplace_smooth,
-    clean_mesh,
-    )
 from .mesh_file import MeshFile
 
-def make_polygon_shapely(x, y):
-    return Polygon([(x[0],y[0]), (x[1],y[1]), (x[2],y[2])])
+def jacobian(x0, y0, x1, y1, x2, y2):
+    return (x1-x0)*(y2-y0)-(x2-x0)*(y1-y0)
+
+def get_area(x, y, t):
+    return .5*jacobian(x[t][:,0], y[t][:,0], x[t][:,1], y[t][:,1], x[t][:,2], y[t][:,2])
+
+def measure(x, y, t):
+    dx = np.diff(np.hstack([x[t], x[t][:,0][None].T]))
+    dy = np.diff(np.hstack([y[t], y[t][:,0][None].T]))
+    edges = np.hypot(dx, dy)
+    perim = edges.sum(axis=1)
+    area = get_area(x, y, t)
+    ap_ratio = area**0.5/ perim
+    return area, edges, perim, ap_ratio
+
+def clean_mesh(tri):
+    """
+    Remove unused points from a mesh and reindex triangulation
+
+    Parameters:
+    x, y (numpy arrays) - coordinates of all points
+    t (numpy array) - triangulation indices
+
+    Returns:
+    x_new, y_new, t_new - cleaned mesh data
+    """
+    x, y, t = tri.x, tri.y, tri.triangles
+    # Find all unique indices that are used in the triangulation
+    used_indices = np.unique(t)
+
+    # Create a mapping from old indices to new indices
+    index_map = np.zeros(len(x), dtype=np.int32) - 1
+    index_map[used_indices] = np.arange(len(used_indices))
+
+    # Create new coordinate arrays containing only used points
+    x_new = x[used_indices]
+    y_new = y[used_indices]
+
+    # Reindex triangulation
+    t_new = index_map[t]
+
+    #print(f"Removed {len(x) - len(x_new)} unused points from mesh")
+    return Triangulation(x_new, y_new, t_new)
+
+def get_same_elements(t0, t1):
+    set0 = set([tuple(i) for i in t0.tolist()])
+    set1 = set([tuple(i) for i in t1.tolist()])
+    set_inter = set0.intersection(set1)
+    set0_idx = {tuple(j):i for i,j in enumerate(t0.tolist())}
+    set1_idx = {tuple(j):i for i,j in enumerate(t1.tolist())}
+    same_elems_in0 = np.array([set0_idx[i] for i in set_inter])
+    same_elems_in1 = np.array([set1_idx[i] for i in set_inter])
+    return same_elems_in0, same_elems_in1
 
 def resample_velocities(u, v, m, xc, yc, x, y, max_mask_fix_node, max_mask_zero_speed):
     u0 = RectBivariateSpline(xc[1:-1:3], yc[1:-1:3], u[::-1], kx=1, ky=1)(y, x, grid=False)
@@ -74,6 +113,22 @@ def advect_nodes(tri0, u0, v0, max_dist0):
         print('NEGATIVE AREA!')
     return Triangulation(x1, y1, tri0.triangles)
 
+def advect_nodes_carefully(x0, y0, u0, v0, t, i=0, maxi=100):
+    x1 = x0 + u0
+    y1 = y0 + v0
+    a1 = get_area(x1, y1, t)
+    if a1.min() >= 0:
+        #print('All areas are positive after advecting nodes carefully', i)
+        return x1, y1
+    neg_elems = np.nonzero(a1 < 0)[0]
+    neg_nodes = np.unique(t[neg_elems].flatten())
+    u0[neg_nodes] *= 0.5
+    v0[neg_nodes] *= 0.5
+    if i >= maxi:
+        raise Exception('Max iterations reached in advect_nodes_carefully')
+    #print(f'Iteration {i}: {len(neg_elems)} negative elements, {len(neg_nodes)} affected nodes')
+    return advect_nodes_carefully(x0, y0, u0, v0, t, i+1, maxi)
+
 def get_mesh_files(idate, lag_dir, mesh_init_file):
     mesh_src_dir = idate.strftime(f'{lag_dir}/%Y')
     mesh_src_file = idate.strftime(f'{mesh_src_dir}/mesh_%Y%m%d.zip')
@@ -96,91 +151,183 @@ def load_data(ifile, mesh_src_file):
     x0, y0, t0 = MeshFile(mesh_src_file).load(['x', 'y', 't'], as_dict=False)    
     return u, v, Triangulation(x0, y0, t0)
 
-def remesh(tri_a, fixed_nodes_idx, min_area, min_edge_length, min_edge_angle, max_edge_length, verbose=False):
-    tri, n = remove_small_elements(tri_a, fixed_nodes_idx, min_area)
-    if verbose: print(f'Removed {n} small elements')
+@njit(cache=True, inline="always")
+def _cross(ax, ay, bx, by):
+    return ax * by - ay * bx
 
-    tri, n = collapse_short_edges(tri, min_edge_length, fixed_nodes_idx=fixed_nodes_idx)
-    tri = remove_hanging_elements(tri)
-    if verbose: print(f'Collapsed {n} short edges')
 
-    tri, n = collapse_small_angle_edges(tri, min_edge_angle, fixed_nodes_idx=fixed_nodes_idx)
-    tri = remove_hanging_elements(tri)
-    if verbose: print(f'Collapsed {n} small angle edges')
+@njit(cache=True)
+def _intersection_area(a, b):
+    # Translate coordinates to improve numerical precision
+    origin_x, origin_y = a[0, 0], a[0, 1]
 
-    tri, n = remove_long_edges(tri, max_edge_length, fixed_nodes_idx=fixed_nodes_idx)
-    if verbose: print(f'Removed {n} long edges')
-    return tri
+    p = np.empty((12, 2), dtype=np.float64)
+    q = np.empty((12, 2), dtype=np.float64)
 
-def optimize_mesh(tri_a, tri_r, fixed_nodes_idx, min_ap_ratio=0.18, min_area=20, verbose=False):
-    _, same_in_r = get_same_elements(tri_a.triangles, tri_r.triangles)
-    new_elems = np.ones(tri_r.triangles.shape[0], dtype=bool)
-    new_elems[same_in_r] = False
-    _, _, _, ap_r = measure(tri_r.x, tri_r.y, tri_r.triangles)
-    new_elems[ap_r < min_ap_ratio] = True
-    new_elems[tri_r.neighbors[new_elems].flatten()] = True
-    new_elems[tri_r.neighbors[new_elems].flatten()] = True
+    for i in range(3):
+        p[i, 0] = a[i, 0] - origin_x
+        p[i, 1] = a[i, 1] - origin_y
 
-    fixed_nodes = set(list(np.unique(tri_r.triangles))) - set(list(np.unique(tri_r.triangles[new_elems])))
-    fixed_nodes = fixed_nodes.union(set(list(fixed_nodes_idx)))
-    fixed_nodes = np.array(list(fixed_nodes))
+    c = np.empty((3, 2), dtype=np.float64)
+    for i in range(3):
+        c[i, 0] = b[i, 0] - origin_x
+        c[i, 1] = b[i, 1] - origin_y
 
-    tri = laplace_smooth(tri_r, iterations=40, factor=0.5, fixed_nodes=fixed_nodes)
+    # Scale-dependent tolerance
+    scale = 0.0
+    for i in range(3):
+        for j in range(2):
+            scale = max(scale, abs(p[i, j]), abs(c[i, j]))
 
-    tri, n = remove_small_elements(tri, fixed_nodes_idx, min_area=min_area)
-    if verbose: print(f'Removed {n} small elements')
-    tri = clean_mesh(tri)
-    return tri
+    if scale == 0.0:
+        return 0.0
 
-class GetWeights:
-    def __init__(self, xa, ya, ta, xo, yo, to, treea, search_dist):
-        self.xa = xa
-        self.ya = ya
-        self.ta = ta
-        self.xo = xo
-        self.yo = yo
-        self.to = to
-        self.treea = treea
-        self.search_dist = search_dist
+    eps = 1e-12 * scale * scale
 
-    def __call__(self, i):
-        src2dst = []
-        weights = []
-        x = self.xo[self.to[i]].mean()
-        y = self.yo[self.to[i]].mean()
-        near_elems_1 = self.treea.query_ball_point([x, y], self.search_dist)
-        po = make_polygon_shapely(self.xo[self.to[i]], self.yo[self.to[i]])
-        for j in near_elems_1:
-            pa = make_polygon_shapely(self.xa[self.ta[j]], self.ya[self.ta[j]])
-            p_int = po.intersection(pa)
-            if p_int.area > 0:
-                src2dst.append((j, i))
-                weights.append(p_int.area / po.area)
-        return src2dst, weights
+    # Ensure clipping triangle is counterclockwise
+    orient = 0.0
+    for i in range(3):
+        j = (i + 1) % 3
+        orient += _cross(
+            c[j, 0] - c[i, 0], c[j, 1] - c[i, 1],
+            c[(i + 2) % 3, 0] - c[i, 0],
+            c[(i + 2) % 3, 1] - c[i, 1]
+        )
 
-def compute_mapping(tri_a, tri_o, search_dist, cores=4):
+    # The expression above equals twice the signed triangle area
+    if abs(orient) <= eps:
+        return 0.0
+
+    if orient < 0.0:
+        tmpx, tmpy = c[1, 0], c[1, 1]
+        c[1, 0], c[1, 1] = c[2, 0], c[2, 1]
+        c[2, 0], c[2, 1] = tmpx, tmpy
+
+    # Reject degenerate subject triangle
+    area_a = 0.0
+    for i in range(3):
+        j = (i + 1) % 3
+        area_a += _cross(p[i, 0], p[i, 1],
+                         p[j, 0], p[j, 1])
+
+    if abs(area_a) <= eps:
+        return 0.0
+
+    n = 3
+
+    # Clip polygon A against each edge of triangle B
+    for edge in range(3):
+        if n == 0:
+            return 0.0
+
+        ex, ey = c[edge, 0], c[edge, 1]
+        fx, fy = c[(edge + 1) % 3, 0], c[(edge + 1) % 3, 1]
+        dx, dy = fx - ex, fy - ey
+
+        m = 0
+        sx, sy = p[n - 1, 0], p[n - 1, 1]
+        ds = _cross(dx, dy, sx - ex, sy - ey)
+        sin = ds >= -eps
+
+        for i in range(n):
+            tx, ty = p[i, 0], p[i, 1]
+            dt = _cross(dx, dy, tx - ex, ty - ey)
+            tin = dt >= -eps
+
+            # Segment crosses clipping boundary
+            if sin != tin:
+                denom = ds - dt
+                if denom != 0.0:
+                    t = ds / denom
+                    q[m, 0] = sx + t * (tx - sx)
+                    q[m, 1] = sy + t * (ty - sy)
+                    m += 1
+
+            if tin:
+                q[m, 0] = tx
+                q[m, 1] = ty
+                m += 1
+
+            sx, sy = tx, ty
+            ds, sin = dt, tin
+
+        n = m
+
+        # Swap working buffers
+        tmp = p
+        p = q
+        q = tmp
+
+    # Shoelace formula
+    if n < 3:
+        return 0.0
+
+    area = 0.0
+    for i in range(n):
+        j = (i + 1) % n
+        area += _cross(p[i, 0], p[i, 1],
+                       p[j, 0], p[j, 1])
+
+    return abs(area) * 0.5
+
+
+@njit(cache=True)
+def triangle_intersection_area(a, b):
+    """
+    a, b: arrays of shape (3, 2)
+    Returns intersection area.
+    """
+    return _intersection_area(a, b)
+
+
+@njit(cache=True, parallel=True)
+def triangle_intersection_areas(A, B):
+    """
+    A, B: arrays of shape (N, 3, 2)
+    Returns an array of N intersection areas.
+    """
+    n = A.shape[0]
+    result = np.empty(n, dtype=np.float64)
+
+    for i in prange(n):
+        result[i] = _intersection_area(A[i], B[i])
+
+    return result
+
+
+def compute_mapping(tri_a, tri_o, search_dist=50):
     xa, ya, ta = tri_a.x, tri_a.y, tri_a.triangles
     xo, yo, to = tri_o.x, tri_o.y, tri_o.triangles
 
-
     same_in_a, same_in_o = get_same_elements(xa[ta], xo[to])
     new_elems = np.ones(tri_o.triangles.shape[0], dtype=bool)
-    new_elems[same_in_o] = False
+    if same_in_o.size > 0:
+        new_elems[same_in_o] = False
     new_elem_idx = np.nonzero(new_elems)[0]
 
     src2dst = np.column_stack([same_in_a, same_in_o]).tolist()
     weights = [1] * len(src2dst)
     elem_xa = xa[ta].mean(axis=1)
     elem_ya = ya[ta].mean(axis=1)
-    get_src2dst_weights = GetWeights(xa, ya, ta, xo, yo, to,
-                                     KDTree(np.column_stack([elem_xa, elem_ya])),
-                                     search_dist)
+    elem_xo = xo[to].mean(axis=1)
+    elem_yo = yo[to].mean(axis=1)
 
-    with Pool(cores) as p:
-        res = p.map(get_src2dst_weights, new_elem_idx.tolist())
-        for r in res:
-            src2dst.extend(r[0])
-            weights.extend(r[1])
+    tree_a = KDTree(np.column_stack([elem_xa, elem_ya])) 
+    area_o = get_area(xo, yo, to)
+    for i in new_elem_idx:
+        elem_o = np.column_stack((xo[to[i]], yo[to[i]]))
+        elem_o_area = area_o[i]
+        #print(elem_o)
+        near_elems_1 = tree_a.query_ball_point([elem_xo[i], elem_yo[i]], search_dist)
+        #print(near_elems_1)
+        for j in near_elems_1:
+            elem_a = np.column_stack((xa[ta[j]], ya[ta[j]]))
+            #print(elem_a)
+            inter_area = triangle_intersection_area(elem_o, elem_a)
+            #print(inter_area)
+            if inter_area > 0:
+                src2dst.append((j, i))
+                weights.append(inter_area / elem_o_area)
     src2dst = np.array(src2dst)
     weights = np.array(weights)
     return src2dst, weights
@@ -189,9 +336,11 @@ def get_area_ratio(tri0, tri_a, tri_o, src2dst, weights):
     area0 = get_area(tri0.x, tri0.y, tri0.triangles)
     area1 = get_area(tri_a.x, tri_a.y, tri_a.triangles)
     area_ratio1 = area1 / area0
-    area_ratio7 = np.zeros(tri_o.triangles.shape[0]) + 0
-    np.add.at(area_ratio7, src2dst[:,1], area_ratio1[src2dst[:,0]] * weights)
-    return area_ratio7
+    area_ratio7 = np.zeros(tri_o.triangles.shape[0])
+    area_weights = np.zeros(tri_o.triangles.shape[0])
+    np.add.at(area_ratio7, src2dst[:, 1], area_ratio1[src2dst[:, 0]] * weights)
+    np.add.at(area_weights, src2dst[:, 1], weights)
+    return area_ratio7 / area_weights
 
 def fill_gaps(array, mask, distance=15):
     """ Fill gaps in input raster
