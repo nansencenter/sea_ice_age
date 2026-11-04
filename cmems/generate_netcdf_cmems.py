@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 import glob
 import sys
 from pathlib import Path
