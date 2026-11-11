@@ -1,0 +1,56 @@
+input_file: /path/to/first/model/year.nc
+input_pattern: /path/to/model/files/seaice_CMCC_*.nc
+work_dir: /path/to/project/work
+output_dir: /path/to/project/output/netcdf
+
+output:
+  file_prefix: cmcc_sea_ice_age_
+  sea_ice_age_name: sea_ice_age
+  export_age_fractions: true
+  export_uncertainty: false
+  export_longitude_latitude: true
+  maximum_age_classes: 6
+
+variables:
+  concentration: siconc
+  eastward_velocity: siu
+  northward_velocity: siv
+  status_flag: status_flag
+  longitude: longitude
+  latitude: latitude
+
+projection:
+  proj4: "+proj=laea +lat_0=90 +lon_0=0 +x_0=0 +y_0=0 +datum=WGS84 +units=m +no_defs +type=crs"
+
+units:
+  internal_distance: km
+  internal_time: day
+
+ice:
+  concentration_threshold: 0.15
+  autumn_search_start: "08-15"
+  autumn_search_stop: "09-15"
+  daily_sic_dir: /path/to/project/work/sic/daily
+
+age:
+  daily_age_dir: /path/to/project/work/age/daily
+  gridded_age_dir: /path/to/project/work/grid/daily
+  maximum_age_classes: 6
+  year_length_days: 365.0
+  autumn_area_ratio_clip: [0.97642671, 1.02437728]
+
+mesh:
+  nominal_spacing_km: 25.0
+  bamg_hmin_km: 15.0
+  bamg_hmax_km: 25.0
+  minimum_latitude: 45.0
+  ice_domain_buffer_cells: 12
+  initial_mesh_file: /path/to/project/work/mesh/mesh_initial.npz
+  daily_mesh_dir: /path/to/project/work/mesh/daily
+  mapping_subdivisions: 3
+  maximum_advection_iterations: 100
+  fixed_boundary_layers: 1
+
+diagnostics:
+  drift_snapshot_dir: /path/to/project/work/diagnostics/drift
+  vector_stride: 10

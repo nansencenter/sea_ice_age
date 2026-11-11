@@ -1,0 +1,21 @@
+name: lm-siage-cmip6
+channels:
+  - conda-forge
+dependencies:
+  - python=3.11
+  - numpy=1.26
+  - scipy=1.11
+  - matplotlib=3.7
+  - netcdf4=1.6
+  - cftime=1.6
+  - xarray=2024.3
+  - pandas=2.2
+  - pyproj=3.6
+  - pyyaml=6.0
+  - tqdm=4.66
+  - pytest=7.4
+  - cython=3.0
+  - setuptools>=68
+  - pip
+  - pip:
+      - -e .
