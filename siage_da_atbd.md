@@ -132,10 +132,12 @@ $$
 
 The sum runs over the source elements $j$ connected to the destination element $i$ by `src2dst`, with remapping weights $w_{ji}$. The forecast step computes two versions of each fraction:
 
-* **Advection-only forecast**, used as the RF training target:
-  $$M^{k,\mathrm{adv}}_t = \mathrm{clip}\big(\mathcal{A}_t M^k_{t-1},\,0,\,100\big)$$
+* **Advection-only forecast**, used as the RF training target: $M^{k,\mathrm{adv}}_t = \mathcal{A}_t\left(M^k_t\right)$
+
+
 * **Full forecast (background)**, corrected for element area change $r_t$ (ratio of new to old element area) and capped by observed SIC:
-  $$M^{k,f}_t = \min\Big(\mathrm{clip}\big(\mathcal{A}_t M^k_{t-1}/r_t,\,0,\,100\big),\; C_t\Big)$$
+
+$M^{k,f}_t = \mathcal{A}_t\left( M^k\_{t-1}/r_t \right)$
 
 The RF is trained on the advection-only field because the full forecast contains the SIC cap, and the SIC cap would add the SIC retrieval's own TB dependence to the RF target.
 
